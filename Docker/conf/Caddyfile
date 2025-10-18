@@ -1,0 +1,11 @@
+localhost {
+    root * /srv/frontend
+    tls /etc/caddy/ssl/localhost.crt /etc/caddy/ssl/localhost.key
+    file_server
+}
+
+api.localhost {
+    handle /status {
+        respond "Tamo activo papi"
+    }
+}

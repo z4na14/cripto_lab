@@ -1,20 +1,17 @@
----
 services:
-  nginx:
-    image: lscr.io/linuxserver/nginx:latest
-    container_name: nginx
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-    volumes:
-      - ./config:/config
-    ports:
-      - 80:80
-      - 443:443
+  caddy:
+    image: caddy:latest
     restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./conf:/etc/caddy
+      - ./../src:/srv
 
-  
   db:
     image: postgres
     restart: always
@@ -26,4 +23,4 @@ services:
     image: adminer
     restart: always
     ports:
-      - 8080:8080
+      - "8080:8080"

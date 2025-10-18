@@ -1,0 +1,25 @@
+body {
+    background: linear-gradient(135deg, #e3f2fd, #ede7f6);
+    font-family: "Roboto", Arial, sans-serif;
+}
+
+.login-card {
+    max-width: 400px;
+    width: 100%;
+    border-radius: 1rem;
+}
+
+.brand-icon {
+    font-size: 48px;
+    color: #0d6efd;
+}
+
+.google-icon {
+    font-size: 20px;
+    vertical-align: middle;
+}
+
+.footer-text {
+    font-size: 0.9rem;
+    color: #6c757d;
+}

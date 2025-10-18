@@ -1,0 +1,53 @@
+body {
+    font-family: "Roboto", Arial, sans-serif;
+    background-color: #f8f9fa;
+}
+
+.sidebar {
+    width: 260px;
+    min-height: 100vh;
+    border-right: 1px solid #dee2e6;
+}
+
+.sidebar .list-group-item {
+    border: none;
+    border-radius: 0;
+    padding: 0.8rem 1rem;
+}
+
+.sidebar .list-group-item.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.main-content {
+    height: 100vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.activity-feed {
+    width: 320px;
+    border-left: 1px solid #dee2e6;
+    background-color: #fff;
+}
+
+.message-textarea {
+    resize: none;
+}
+
+.material-symbols-outlined {
+    vertical-align: middle;
+}
+
+.navbar-brand span {
+    font-size: 28px;
+    color: #0d6efd;
+    vertical-align: middle;
+}
+
+@media (max-width: 992px) {
+    .sidebar, .activity-feed {
+        display: none;
+    }
+}
