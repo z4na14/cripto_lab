@@ -18,5 +18,5 @@ db.localhost {
         }
     }
 
-    reverse_proxy localhost:8081
+    reverse_proxy http://adminer:8080
 }
