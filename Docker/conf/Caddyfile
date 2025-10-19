@@ -9,3 +9,14 @@ api.localhost {
         respond "Tamo activo papi"
     }
 }
+
+db.localhost {
+    tls /etc/caddy/mTLS/Server/server.crt /etc/caddy/mTLS/Server/server.key {
+        client_auth {
+            mode require_and_verify
+            trusted_ca_cert_file  /etc/caddy/mTLS/Client/client.crt
+        }
+    }
+
+    reverse_proxy localhost:8081
+}
