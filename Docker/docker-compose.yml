@@ -20,7 +20,7 @@ services:
 
   db:
     image: postgres
-    restart: always
+    restart: unless-stopped
     shm_size: 128mb
     environment:
       POSTGRES_PASSWORD: UwU
@@ -29,8 +29,18 @@ services:
 
   adminer:
     image: adminer
-    restart: always
+    restart: unless-stopped
     ports:
       - "8081:8080"
+    networks:
+      - internal
+
+  backend:
+    image: cripto:backend
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./../src/backend:/app
     networks:
       - internal

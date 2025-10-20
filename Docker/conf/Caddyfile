@@ -5,8 +5,13 @@ localhost {
 }
 
 api.localhost {
+    tls /etc/caddy/ssl/localhost.crt /etc/caddy/ssl/localhost.key
     handle /status {
-        respond "Tamo activo papi"
+        respond "Caddy ta activo papi"
+    }
+
+    handle / {
+        reverse_proxy http://backend:9000
     }
 }
 
