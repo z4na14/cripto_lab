@@ -1,92 +1,128 @@
-from urllib.parse import urlparse
+#!/usr/bin/env python3
 import http.server
 import json
 import psycopg2
+import bcrypt
+import secrets
+from datetime import datetime
+
+# Conexión a PostgreSQL
+conn = psycopg2.connect(
+    dbname="postgres",
+    user="postgres",
+    password="UwU",
+    host="db",
+    port="5432"
+)
+conn.autocommit = True
+
+# Crear tabla si no existe
+with conn.cursor() as cur:
+    cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    username TEXT PRIMARY KEY,
+                    password TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    token TEXT
+                    );
+                """)
 
 
 class MyHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
+    def _send_json(self, data, status=200):
+        body = json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(json.dumps({"message": "Hello over HTTPS!"}).encode())
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == "/api/user":
+            auth = self.headers.get("Authorization", "")
+            token = auth.replace("Bearer ", "").strip()
+
+            if not token:
+                self._send_json({"ok": False, "error": "Token requerido"}, 401)
+                return
+
+            with conn.cursor() as cur:
+                cur.execute("SELECT username FROM users WHERE token = %s;", (token,))
+                row = cur.fetchone()
+
+            if row:
+                user = {"username": row[0], "created_at": row[1].isoformat()}
+                self._send_json({"ok": True, "user": user})
+            else:
+                self._send_json({"ok": False, "error": "Token inválido"}, 401)
+        else:
+            self.send_error(404, "Ruta no encontrada")
 
     def do_POST(self):
-        length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(length)
-        try:
-            data = json.loads(post_data)
-        except json.JSONDecodeError:
-            data = {"error": "Invalid JSON"}
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"received": data}).encode())
+        if self.path == "/api/user/register":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                data = json.loads(body)
+            except Exception:
+                self._send_json({"ok": False, "error": "JSON inválido"}, 400)
+                return
 
-    def handle_get_users(self):
-        try:
+            username = data.get("username", "").strip()
+            password = data.get("password", "").encode()
+
+            if not username or not password:
+                self._send_json({"ok": False, "error": "Faltan username o password"}, 400)
+                return
+
+            hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
+            token = secrets.token_hex(8)  # 16 caracteres hex
+
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO users (username, password, token) VALUES (%s, %s, %s);",
+                        (username, hashed, token)
+                    )
+                user = {"username": username, "created_at": datetime.now().isoformat()}
+                self._send_json({"ok": True, "user": user, "token": token}, 201)
+            except psycopg2.errors.UniqueViolation:
+                self._send_json({"ok": False, "error": "El usuario ya existe"}, 409)
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
+
+        elif self.path == "/api/user/login":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                data = json.loads(body)
+            except Exception:
+                self._send_json({"ok": False, "error": "JSON inválido"}, 400)
+                return
+
+            username = data.get("username", "").strip()
+            password = data.get("password", "").encode()
+
+            if not username or not password:
+                self._send_json({"ok": False, "error": "Faltan username o password"}, 400)
+                return
+
+            hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
+
             with conn.cursor() as cur:
-                cur.execute("SELECT id, pwd_hs FROM Users;")
-                rows = cur.fetchall()
-            users = [{"id": r[0], "name": r[1], "email": r[2]} for r in rows]
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(users).encode())
-        except Exception as e:
-            self.send_error(500, str(e))
+                cur.execute("SELECT username FROM users WHERE password = %s;", (hashed,))
+                row = cur.fetchone()
+            if row:
+                user = {"username": row[0], "created_at": row[1].isoformat()}
+                self._send_json({"ok": True, "user": user})
+            else:
+                self._send_json({"ok": False, "error": "Usuario no encontrado"}, 401)
 
-    def handle_post_user(self):
-        length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(length)
-        try:
-            data = json.loads(post_data)
-            name = data.get("name")
-            email = data.get("email")
-            if not name or not email:
-                raise ValueError("Missing 'name' or 'email'")
-
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO users (name, email) VALUES (%s, %s) RETURNING id;",
-                    (name, email)
-                )
-                user_id = cur.fetchone()[0]
-
-            self.send_response(201)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"id": user_id, "name": name, "email": email}).encode())
-
-        except json.JSONDecodeError:
-            self.send_error(400, "Invalid JSON")
-        except Exception as e:
-            self.send_error(500, str(e))
-
+        else:
+            self.send_error(404, "Ruta no encontrada")
 
 
 if __name__ == "__main__":
-    # Configurar conexión HTTP para realizar peticiones
-    server_address = ('0.0.0.0', 9000)
+    server_address = ("0.0.0.0", 9000)
     httpd = http.server.HTTPServer(server_address, MyHandler)
     httpd.serve_forever()
-
-    # Realizar conexión a la base de datos
-    conn = psycopg2.connect(
-        dbname="postgres",
-        user="postgres",
-        password="UwU",
-        host="0.0.0.0",
-        port="5432"
-    )
-    conn.autocommit = True
-
-    # Crear tabla para los usuarios si esta no está ya presente
-    with conn.cursor() as cur:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS Users (
-            id PRIMARY KEY,
-            pwd_hs typea NOT NULL,
-            creado date NOT NULL
-        );
-                    """)
