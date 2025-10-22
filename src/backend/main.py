@@ -32,7 +32,8 @@ with conn.cursor() as cur:
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
         password TEXT NOT NULL,
-        token TEXT NOT NULL UNIQUE
+        token TEXT NOT NULL UNIQUE,
+        ip TEXT NOT NULL
         );
     CREATE TABLE IF NOT EXISTS messages (
         username TEXT,
@@ -86,14 +87,15 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
             # Query a la base de datos para encontrar el usuario del respectivo token de sesion
             with conn.cursor() as cur:
-                cur.execute("SELECT username FROM users WHERE token = %s;", (token,))
+                cur.execute("SELECT username FROM users WHERE token = %s AND ip = %s;",
+                            (token, self.client_address[0]))
                 self.row = cur.fetchone()
 
             # Responder a la peticion con el usuario enlazado al token de sesion
             if self.row:
                 self._send_json({"ok": True, "user": self.row[0]})
             else:
-                self._send_json({"ok": False, "error": "Bad token (no user)"}, 502)
+                self._send_json({"ok": False, "error": "Bad user"}, 502)
                 return
         else:
             self._send_json({"ok": False, "error": "Bad route"}, 404)
@@ -131,8 +133,8 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 # Guardar el nuevo usuario en la base de datos
                 with conn.cursor() as cur:
                     cur.execute(
-                        "INSERT INTO users (username, password, token) VALUES (%s, %s, %s);",
-                        (username, hashed, token)
+                        "INSERT INTO users (username, password, token, ip) VALUES (%s, %s, %s, %s);",
+                        (username, hashed, token, self.client_address[0])
                     )
                 # Devolver al cliente confirmacion del usuario y el token de sesion generado
                 self._send_json({"ok": True, "user": username, "token": token})
@@ -167,7 +169,8 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
                     with conn.cursor() as cur:
                         # Y lo actualizamos en la base de datos
-                        cur.execute("UPDATE users SET token = %s WHERE username = %s", (new_token, username))
+                        cur.execute("UPDATE users SET token = %s, ip = %s WHERE username = %s",
+                                    (new_token, self.client_address[0], username))
 
                     self._send_json({"ok": True, "user": username, "token": new_token})
                 else:

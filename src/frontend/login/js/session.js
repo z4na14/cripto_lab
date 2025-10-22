@@ -71,7 +71,7 @@ async function login_usuario(ev) {
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', data.user);
             window.location.href = "/";
-        } else{
+        } else {
             if (res.status === 504) {
                 mostrarError("Usuario inexistente.");
             } else if (res.status === 506) {

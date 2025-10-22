@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>OmniMessenger | Dashboard</title>
+    <title>OmniMessenger</title>
 
     <link href="stylesheet.css" rel="stylesheet">
     <!-- Bootstrap CSS -->
@@ -30,7 +30,7 @@
                     data-bs-target="#connectServiceModal"
             >
                 <span class="material-symbols-outlined">add_link</span>
-                Connect Service
+                Conectar Servicio
             </button>
 
             <div class="dropdown">
@@ -40,10 +40,10 @@
                         data-bs-toggle="dropdown"
                 >
                     <span class="material-symbols-outlined">account_box</span>
-                    <span id="user_tag">user</span>
+                    <span id="user_tag" class="p-2">user</span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="/login" id="logout">Logout</a></li>
+                    <li><a class="dropdown-item" href="/login" id="logout">Cerrar Sesión</a></li>
                 </ul>
             </div>
         </div>
@@ -54,19 +54,19 @@
 <div class="d-flex">
     <!-- Sidebar -->
     <aside class="sidebar bg-white p-3">
-        <h6 class="text-uppercase text-muted mb-3">Connected Services</h6>
+        <h6 class="text-uppercase text-muted mb-3">Servicios Conectados</h6>
         <div class="list-group list-group-flush">
             <a href="#" class="list-group-item list-group-item-action active">
                 <span class="material-symbols-outlined me-2">mail</span> Gmail <br>
-                <span class="badge bg-success float-end">Connected</span>
+                <span class="badge bg-success float-end">Conectado</span>
             </a>
             <a href="#" class="list-group-item list-group-item-action">
                 <span class="material-symbols-outlined">send</span> Telegram <br>
-                <span class="badge bg-success float-end">Connected</span>
+                <span class="badge bg-success float-end">Conectado</span>
             </a>
             <a href="#" class="list-group-item list-group-item-action">
                 <span class="material-symbols-outlined me-2">chat_bubble</span> Whatsapp <br>
-                <span class="badge bg-warning float-end">Reauth</span>
+                <span class="badge bg-warning float-end">Reautenticar</span>
             </a>
             <a
                     href="#"
@@ -81,35 +81,35 @@
     <!-- Main Content -->
     <main class="flex-grow-1 main-content">
         <div class="container-fluid">
-            <h4 class="mb-4">Create New Broadcast</h4>
+            <h4 class="mb-4">Crear emisión nueva</h4>
 
             <div class="card shadow-sm p-4 mb-4">
                 <form>
                     <div class="mb-3">
-                        <label for="message" class="form-label">Message Content</label>
+                        <label for="message" class="form-label">Contenido del mensaje</label>
                         <textarea
                                 class="form-control message-textarea"
                                 id="message"
                                 rows="6"
-                                placeholder="Type your message here..."
+                                placeholder="Escribe aquí el mensaje..."
                                 required
                         ></textarea>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Select Services</label>
+                        <label class="form-label">Servicios seleccionados</label>
                         <select class="form-select" multiple>
                             <option>Gmail</option>
                             <option>Telegram</option>
                             <option>Whatsapp</option>
                         </select>
-                        <small class="text-muted">Hold Ctrl (Windows) or ⌘ (Mac) to select multiple.</small>
+                        <small class="text-muted">Mantén Ctrl (Windows) o ⌘ (Mac) para seleccionar varios.</small>
                     </div>
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary d-flex align-items-center gap-1">
                             <span class="material-symbols-outlined">send</span>
-                            Send Now
+                            Enviar ahora
                         </button>
                     </div>
                 </form>
@@ -129,18 +129,18 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="connectServiceModalLabel">Connect a Service</h5>
+                <h5 class="modal-title" id="connectServiceModalLabel">Conecta un servicio</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="row g-3">
                     <div class="col-6 d-grid">
-                        <button class="btn btn-outline-primary d-flex align-items-center justify-content-center gap-2">
+                        <button class="btn btn-outline-primary d-flex align-items-center justify-content-center gap-2" disabled>
                             <span class="material-symbols-outlined">mail</span> Gmail
                         </button>
                     </div>
                     <div class="col-6 d-grid">
-                        <button class="btn btn-outline-info d-flex align-items-center justify-content-center gap-2">
+                        <button class="btn btn-outline-info d-flex align-items-center justify-content-center gap-2" disabled>
                             <span class="material-symbols-outlined">send</span> Telegram
                         </button>
                     </div>
@@ -150,7 +150,7 @@
                         </button>
                     </div>
                     <div class="col-6 d-grid">
-                        <button class="btn btn-outline-success d-flex align-items-center justify-content-center gap-2">
+                        <button class="btn btn-outline-success d-flex align-items-center justify-content-center gap-2" disabled>
                             <span class="material-symbols-outlined">chat_bubble</span> WhatsApp
                         </button>
                     </div>
@@ -162,15 +162,12 @@
                         class="btn btn-secondary"
                         data-bs-dismiss="modal"
                 >
-                    Close
+                    Cerrar
                 </button>
             </div>
         </div>
     </div>
 </div>
-
-<!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 
