@@ -22,16 +22,33 @@ async function registrar_usuario(ev) {
             body: JSON.stringify({ username, password })
         });
 
+        console.log(res);
         const data = await res.json();
+
         if (data.ok) {
             localStorage.setItem('token', data.token);
-            localStorage.setItem('user', data.user.username);
+            localStorage.setItem('user', data.user);
             window.location.href = "/";
         } else {
-            mostrarError("Error al registrar usuario.");
+            if (res.status === 503) {
+                mostrarError("Usuario ya registrado.");
+            } else if (res.status === 505) {
+                mostrarError("El usuario debe contener minimo 5 " +
+                    "caracteres alfanuméricos y la contraseña:" +
+                    "<ul>" +
+                    "<li>Mínimo 8 caracteres.</li>" +
+                    "<li>Una mayúscula.</li>" +
+                    "<li>Una minúscula.</li>" +
+                    "<li>Un número.</li>" +
+                    "<li>Un caracter especial.</li>" +
+                    "</ul>")
+            } else {
+                mostrarError("Error interno.");
+            }
         }
     } catch (err) {
-        mostrarError("Error de conexión al servidor.");
+        mostrarError("Error de conexión al servidor");
+        console.log(err);
     }
 }
 
@@ -47,20 +64,27 @@ async function login_usuario(ev) {
             body: JSON.stringify({ username, password })
         });
 
+        console.log(res);
         const data = await res.json();
 
         if (data.ok) {
             localStorage.setItem('token', data.token);
-            localStorage.setItem('user', data.username);
+            localStorage.setItem('user', data.user);
             window.location.href = "/";
-        } else {
-            mostrarError("Usuario o contraseña incorrectos.");
+        } else{
+            if (res.status === 504) {
+                mostrarError("Usuario inexistente.");
+            } else if (res.status === 506) {
+                mostrarError("Contraseña incorrecta.");
+            } else {
+                mostrarError("Error interno.");
+            }
         }
     } catch (err) {
-        mostrarError("Error de conexión al servidor.");
+        mostrarError("Error de conexión al servidor");
+        console.log(err);
     }
 }
-
 
 (async function validarToken() {
     const token = localStorage.getItem('token');
@@ -71,15 +95,21 @@ async function login_usuario(ev) {
                 method: "GET",
                 headers: { Authorization: token }
             });
+
+            console.log(res);
             const data = await res.json();
+
             if (data.ok) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', data.user);
                 window.location.href = "/";
             } else {
-                localStorage.setItem('user', null);
-                localStorage.setItem('token', null);
+                localStorage.removeItem('user');
+                localStorage.removeItem('token');
             }
         } catch (err) {
-            mostrarError("No se pudo conectar con el servidor.");
+            mostrarError("Error de conexión al servidor");
+            console.log(err);
         }
     }
 })();
