@@ -23,17 +23,6 @@
             <strong>OmniMessenger</strong>
         </a>
 
-        <form class="d-none d-md-flex ms-auto me-3">
-            <div class="input-group">
-                <span class="input-group-text material-symbols-outlined">search</span>
-                <input
-                        class="form-control"
-                        type="search"
-                        placeholder="Search messages or contacts"
-                />
-            </div>
-        </form>
-
         <div class="d-flex align-items-center gap-3">
             <button
                     class="btn btn-outline-primary d-flex align-items-center gap-1"
@@ -54,12 +43,7 @@
                     <span id="user_tag">user</span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#">Settings</a></li>
-                    <li><a class="dropdown-item" href="#">Help</a></li>
-                    <li>
-                        <hr class="dropdown-divider"/>
-                    </li>
-                    <li><a class="dropdown-item" href="/login">Logout</a></li>
+                    <li><a class="dropdown-item" href="/login" id="logout">Logout</a></li>
                 </ul>
             </div>
         </div>
@@ -73,15 +57,15 @@
         <h6 class="text-uppercase text-muted mb-3">Connected Services</h6>
         <div class="list-group list-group-flush">
             <a href="#" class="list-group-item list-group-item-action active">
-                <span class="material-symbols-outlined me-2">mail</span> Gmail
+                <span class="material-symbols-outlined me-2">mail</span> Gmail <br>
                 <span class="badge bg-success float-end">Connected</span>
             </a>
             <a href="#" class="list-group-item list-group-item-action">
-                <span class="material-symbols-outlined">send</span> Telegram
+                <span class="material-symbols-outlined">send</span> Telegram <br>
                 <span class="badge bg-success float-end">Connected</span>
             </a>
             <a href="#" class="list-group-item list-group-item-action">
-                <span class="material-symbols-outlined me-2">chat_bubble</span> Slack
+                <span class="material-symbols-outlined me-2">chat_bubble</span> Whatsapp <br>
                 <span class="badge bg-warning float-end">Reauth</span>
             </a>
             <a
@@ -90,7 +74,6 @@
                     data-bs-toggle="modal"
                     data-bs-target="#connectServiceModal"
             >
-                <span class="material-symbols-outlined me-2">add</span> Add Service
             </a>
         </div>
     </aside>
@@ -118,7 +101,7 @@
                         <select class="form-select" multiple>
                             <option>Gmail</option>
                             <option>Telegram</option>
-                            <option>Slack</option>
+                            <option>Whatsapp</option>
                         </select>
                         <small class="text-muted">Hold Ctrl (Windows) or ⌘ (Mac) to select multiple.</small>
                     </div>
@@ -128,38 +111,11 @@
                             <span class="material-symbols-outlined">send</span>
                             Send Now
                         </button>
-                        <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined">schedule</span>
-                            Schedule
-                        </button>
-                        <button type="button" class="btn btn-outline-dark d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined">save</span>
-                            Save Draft
-                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </main>
-
-    <!-- Activity Feed -->
-    <aside class="activity-feed p-3">
-        <h6 class="text-uppercase text-muted mb-3">Recent Activity</h6>
-        <ul class="list-group list-group-flush small">
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span><span class="material-symbols-outlined me-2 text-success">send</span> Email Broadcast</span>
-                <span class="badge bg-success">Sent</span>
-            </li>
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span><span class="material-symbols-outlined me-2 text-primary">chat</span> Telegram Update</span>
-                <span class="badge bg-warning text-dark">Pending</span>
-            </li>
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span><span class="material-symbols-outlined me-2 text-danger">error</span> Slack Alert</span>
-                <span class="badge bg-danger">Failed</span>
-            </li>
-        </ul>
-    </aside>
 </div>
 
 <!-- Connect Service Modal -->
@@ -185,7 +141,7 @@
                     </div>
                     <div class="col-6 d-grid">
                         <button class="btn btn-outline-info d-flex align-items-center justify-content-center gap-2">
-                            <span class="material-symbols-outlined">telegram</span> Telegram
+                            <span class="material-symbols-outlined">send</span> Telegram
                         </button>
                     </div>
                     <div class="col-6 d-grid">
@@ -195,7 +151,7 @@
                     </div>
                     <div class="col-6 d-grid">
                         <button class="btn btn-outline-success d-flex align-items-center justify-content-center gap-2">
-                            <span class="material-symbols-outlined">whatsapp</span> WhatsApp
+                            <span class="material-symbols-outlined">chat_bubble</span> WhatsApp
                         </button>
                     </div>
                 </div>

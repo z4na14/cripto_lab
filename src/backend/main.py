@@ -22,7 +22,6 @@ with conn.cursor() as cur:
                 CREATE TABLE IF NOT EXISTS users (
                     username TEXT PRIMARY KEY,
                     password TEXT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     token TEXT
                     );
                 """)
@@ -38,12 +37,12 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        row = None
         if self.path == "/api/user":
-            auth = self.headers.get("Authorization", "")
-            token = auth.replace("Bearer ", "").strip()
+            token = self.headers.get("Authorization", "")
 
             if not token:
-                self._send_json({"ok": False, "error": "Token requerido"}, 401)
+                self._send_json({"ok": False}, 401)
                 return
 
             with conn.cursor() as cur:
@@ -51,28 +50,28 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 row = cur.fetchone()
 
             if row:
-                user = {"username": row[0], "created_at": row[1].isoformat()}
-                self._send_json({"ok": True, "user": user})
+                self._send_json({"ok": True, "user": row[0]})
             else:
-                self._send_json({"ok": False, "error": "Token inválido"}, 401)
+                self._send_json({"ok": False}, 401)
         else:
             self.send_error(404, "Ruta no encontrada")
 
     def do_POST(self):
+        row = None
         if self.path == "/api/user/register":
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
                 data = json.loads(body)
             except Exception:
-                self._send_json({"ok": False, "error": "JSON inválido"}, 400)
+                self._send_json({"ok": False}, 400)
                 return
 
-            username = data.get("username", "").strip()
-            password = data.get("password", "").encode()
+            username = data.get("username")
+            password = data.get("password").encode("utf-8")
 
             if not username or not password:
-                self._send_json({"ok": False, "error": "Faltan username o password"}, 400)
+                self._send_json({"ok": False}, 400)
                 return
 
             hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
@@ -84,12 +83,11 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                         "INSERT INTO users (username, password, token) VALUES (%s, %s, %s);",
                         (username, hashed, token)
                     )
-                user = {"username": username, "created_at": datetime.now().isoformat()}
-                self._send_json({"ok": True, "user": user, "token": token}, 201)
+                self._send_json({"ok": True, "user": username, "token": token}, 201)
             except psycopg2.errors.UniqueViolation:
-                self._send_json({"ok": False, "error": "El usuario ya existe"}, 409)
+                self._send_json({"ok": False}, 409)
             except Exception as e:
-                self._send_json({"ok": False, "error": str(e)}, 500)
+                self._send_json({"ok": False}, 500)
 
         elif self.path == "/api/user/login":
             try:
@@ -97,26 +95,29 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 body = self.rfile.read(length)
                 data = json.loads(body)
             except Exception:
-                self._send_json({"ok": False, "error": "JSON inválido"}, 400)
+                self._send_json({"ok": False}, 400)
                 return
 
-            username = data.get("username", "").strip()
-            password = data.get("password", "").encode()
+            username = data.get("username")
+            password = data.get("password").encode("utf-8")
 
             if not username or not password:
-                self._send_json({"ok": False, "error": "Faltan username o password"}, 400)
+                self._send_json({"ok": False}, 400)
                 return
 
-            hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
-
             with conn.cursor() as cur:
-                cur.execute("SELECT username FROM users WHERE password = %s;", (hashed,))
+                cur.execute("SELECT password FROM users WHERE username = %s;", (username,))
                 row = cur.fetchone()
             if row:
-                user = {"username": row[0], "created_at": row[1].isoformat()}
-                self._send_json({"ok": True, "user": user})
+                if bcrypt.checkpw(password, row[0].encode("utf-8")):
+                    new_token = secrets.token_hex(8)
+
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE users SET token = %s WHERE username = %s", (new_token, username))
+
+                    self._send_json({"ok": True, "user": username, "token": new_token}, 200)
             else:
-                self._send_json({"ok": False, "error": "Usuario no encontrado"}, 401)
+                self._send_json({"ok": False}, 401)
 
         else:
             self.send_error(404, "Ruta no encontrada")

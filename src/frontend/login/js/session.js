@@ -10,11 +10,6 @@ function mostrarError(msg) {
     <div class="alert alert-danger">${msg}</div>`;
 }
 
-function mostrarOk(msg) {
-    document.getElementById("errores").innerHTML = `
-    <div class="alert alert-success">${msg}</div>`;
-}
-
 async function registrar_usuario(ev) {
     ev.preventDefault();
     const username = usernameEl.value.trim();
@@ -33,7 +28,7 @@ async function registrar_usuario(ev) {
             localStorage.setItem('user', data.user.username);
             window.location.href = "/";
         } else {
-            mostrarError(data.error || "Error al registrar usuario.");
+            mostrarError("Error al registrar usuario.");
         }
     } catch (err) {
         mostrarError("Error de conexión al servidor.");
@@ -56,10 +51,10 @@ async function login_usuario(ev) {
 
         if (data.ok) {
             localStorage.setItem('token', data.token);
-            localStorage.setItem('user', data.user.username);
+            localStorage.setItem('user', data.username);
             window.location.href = "/";
         } else {
-            mostrarError(data.error || "Usuario o contraseña incorrectos.");
+            mostrarError("Usuario o contraseña incorrectos.");
         }
     } catch (err) {
         mostrarError("Error de conexión al servidor.");
@@ -74,7 +69,7 @@ async function login_usuario(ev) {
         try {
             const res = await fetch(`${API_BASE}/api/user`, {
                 method: "GET",
-                headers: { Authorization: "Bearer " + token }
+                headers: { Authorization: token }
             });
             const data = await res.json();
             if (data.ok) {

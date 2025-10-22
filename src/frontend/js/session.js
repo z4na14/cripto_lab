@@ -1,3 +1,11 @@
+const logoutBtn = document.getElementById('logout');
+
+function eliminar_sesion() {
+    localStorage.setItem('user', null);
+    localStorage.setItem('token', null);
+    window.location.href = "/login";
+}
+
 (async function validarToken() {
     const token = localStorage.getItem('token');
 
@@ -5,18 +13,20 @@
         try {
             const res = await fetch(`${API_BASE}/api/user`, {
                 method: "GET",
-                headers: { Authorization: "Bearer " + token }
+                headers: { Authorization: token }
             });
             const data = await res.json();
             if (data.ok) {
-                window.location.href = "/";
+                window.location.href = "/login";
             } else {
                 localStorage.setItem('user', null);
                 localStorage.setItem('token', null);
-                window.location.href = "/login";
             }
         } catch (err) {
-            mostrarError("No se pudo conectar con el servidor.");
+            console.log("No se pudo conectar con el servidor.");
         }
     }
 })();
+
+
+logoutBtn.addEventListener('click', eliminar_sesion, false);
