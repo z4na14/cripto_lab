@@ -65,6 +65,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
     # - 504: Usuario inexistente
     # - 505: Formato de usuario/contraseña incorrecto
     # - 506: Contraseña incorrecta
+    # - 507: Mensaje incorrecto
     # - 400: Error interno
     def _send_json(self, data, status=200):
         body = json.dumps(data).encode()
@@ -112,15 +113,19 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"ok": False, "error": "Bad req content"}, 502)
             return
 
-        # Cargar en variables los datos del cuerpo esperados
-        try:
-            username = data.get("username")
-            password = data.get("password")
-        except Exception:
-            self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
-            return
-
+        # Subdirectorio para registrar usuarios en la plataforma
         if self.path == "/api/user/register":
+            # Cargar en variables los datos del cuerpo esperados
+            try:
+                username = data.get("username")
+                password = data.get("password")
+                message = data.get("message")
+                
+            except Exception:
+                self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
+                return
+
+            
             if not re.match(self.passwd_regex, password) or not re.match(self.usr_regex, username):
                 self._send_json({"ok": False, "error": "Formato usuario/contraseña incorrecto"}, 505)
                 return
@@ -147,7 +152,18 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "Unknown server error"}, 400)
                 return
 
+        # Subdirectorio para mandar el inicio de sesion
         elif self.path == "/api/user/login":
+            # Cargar en variables los datos del cuerpo esperados
+            try:
+                username = data.get("username")
+                password = data.get("password")
+                message = data.get("message")
+                
+            except Exception:
+                self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
+                return
+ 
             try:
                 # Buscamos el usuario de la peticion de login
                 with conn.cursor() as cur:
@@ -181,10 +197,38 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "Unknown server error"}, 400)
                 return
 
+        # Registrar mensajes enviados para ponerlos en una "cola"
+        elif self.path == "/api/messages/upload":
+            username  = data.get("username")
+            token     = data.get("token")
+            message   = data.get("message")
+            gmailB    = data.get("gmail") or False
+            telegramB = data.get("telegram") or False
+            whatsappB = data.get("whatsapp") or False
+            slackB    = data.get("slack") or False
+
+            if len(message) > 2000:
+                self._send_json({"ok": False, "error": "Message too long"}, 507)
+
+            try:
+                with conn.cursor() as cur:
+                    # Comprobamos que el usuario del mensaje corresponde con el token
+                    cur.execute("""
+                                INSERT INTO messages (username, message, time, gmail, telegram, whatsapp, slack)
+                                SELECT username, %s, NOW(), %s, %s, %s, %s
+                                FROM users
+                                WHERE token = %s;
+                                """, (message, gmailB, telegramB, whatsappB, slackB, token))
+
+                    # Devolver al cliente confirmacion del usuario y el token de sesion generado
+                self._send_json({"ok": True})
+            except Exception:
+                self._send_json({"ok": False, "error": "Unknown server error"}, 400)
+                return                
+
         else:
             self._send_json({"ok": False, "error": "Bad route"}, 404)
             return
-
 
 
 if __name__ == "__main__":

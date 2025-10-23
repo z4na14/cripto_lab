@@ -17,8 +17,8 @@ function eliminar_sesion() {
                 headers: { Authorization: token }
             });
 
-            console.log(res);
             const data = await res.json();
+            console.log(res);
 
             if (!data.ok) {
                 localStorage.removeItem('user');

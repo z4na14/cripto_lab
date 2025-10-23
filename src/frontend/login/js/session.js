@@ -22,8 +22,8 @@ async function registrar_usuario(ev) {
             body: JSON.stringify({ username, password })
         });
 
-        console.log(res);
         const data = await res.json();
+        console.log(res);
 
         if (data.ok) {
             localStorage.setItem('token', data.token);
@@ -64,8 +64,8 @@ async function login_usuario(ev) {
             body: JSON.stringify({ username, password })
         });
 
-        console.log(res);
         const data = await res.json();
+        console.log(res);
 
         if (data.ok) {
             localStorage.setItem('token', data.token);
@@ -95,9 +95,9 @@ async function login_usuario(ev) {
                 method: "GET",
                 headers: { Authorization: token }
             });
-
-            console.log(res);
+            
             const data = await res.json();
+            console.log(res);
 
             if (data.ok) {
                 localStorage.setItem('token', data.token);
