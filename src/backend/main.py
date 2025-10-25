@@ -119,14 +119,19 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 username = data.get("username")
                 password = data.get("password")
-                message = data.get("message")
-                
+
             except Exception:
                 self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
                 return
 
             
             if not re.match(self.passwd_regex, password) or not re.match(self.usr_regex, username):
+                self._send_json({"ok": False, "error": "Formato usuario/contraseña incorrecto"}, 505)
+                return
+
+            # La libreria Bcrypt admite contraseñas de hasta 72 caracteres. Por encima habria que hacer el hash de la
+            # contraseña, y luego generar el hash que se va a almacenar usando el salt.
+            if len(password) > 72:
                 self._send_json({"ok": False, "error": "Formato usuario/contraseña incorrecto"}, 505)
                 return
 
@@ -158,8 +163,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 username = data.get("username")
                 password = data.get("password")
-                message = data.get("message")
-                
+
             except Exception:
                 self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
                 return
@@ -199,7 +203,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
         # Registrar mensajes enviados para ponerlos en una "cola"
         elif self.path == "/api/messages/upload":
-            username  = data.get("username")
             token     = data.get("token")
             message   = data.get("message")
             gmailB    = data.get("gmail") or False
