@@ -15,7 +15,7 @@ while True:
         conn = psycopg2.connect(
             dbname="postgres",
             user="postgres",
-            password="UwU",
+            password="Cripto2526",
             host="db",
             port="5432"
         )
