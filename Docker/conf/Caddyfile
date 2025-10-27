@@ -8,7 +8,7 @@ localhost {
     }
 
     handle /status {
-        respond "Caddy ta activo papi"
+        respond "El servidor está activo"
     }
 }
 

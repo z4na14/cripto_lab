@@ -1,11 +1,16 @@
 const API_BASE = window.location.origin;
 const logoutBtn = document.getElementById('logout');
 
+// Funcion para vaciar la sesion del usuario en el navegador
+// y redirigir a la pagina de inicio de sesion
 function eliminar_sesion() {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
     window.location.href = "/login";
 }
+
+// Función en linea asincrona que comprueba que el token del usuario
+// sea valido, mandandolo al servidor
 
 (async function validarToken() {
     const token = localStorage.getItem('token');
@@ -18,14 +23,12 @@ function eliminar_sesion() {
             });
 
             const data = await res.json();
-            console.log(res);
 
             if (!data.ok) {
-                localStorage.removeItem('user');
-                localStorage.removeItem('token');
-                window.location.href = "/login";
+                eliminar_sesion();
             }
             else {
+                // Cambiar el nombre de usuario que aparece en la barra de navegacion
                 document.getElementById('user_tag').textContent = data.user;
             }
         } catch (err) {
