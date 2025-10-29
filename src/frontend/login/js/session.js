@@ -12,6 +12,8 @@ function mostrarError(msg) {
 
 async function registrar_usuario(ev) {
     ev.preventDefault();
+
+    // Guardar en memoria el usuario y la conraseña introducidos
     const username = usernameEl.value.trim();
     const password = passwordEl.value.trim();
 
@@ -23,13 +25,15 @@ async function registrar_usuario(ev) {
         });
 
         const data = await res.json();
-        console.log(res);
 
         if (data.ok) {
+            // Si la informacion es correcta, reenviamos el usuario a la pagina principal
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', data.user);
             window.location.href = "/";
         } else {
+            // Comparamos los codigos de estado recibidos para responder al usuario acorde
+            // Todos estos códigos estan definidos en el codigo del backend
             if (res.status === 503) {
                 mostrarError("Usuario ya registrado.");
             } else if (res.status === 505) {
@@ -53,6 +57,7 @@ async function registrar_usuario(ev) {
 }
 
 async function login_usuario(ev) {
+    // Igual que el register, pero los mensajes de error son diferentes
     ev.preventDefault();
     const username = usernameEl.value.trim();
     const password = passwordEl.value.trim();
@@ -65,7 +70,6 @@ async function login_usuario(ev) {
         });
 
         const data = await res.json();
-        console.log(res);
 
         if (data.ok) {
             localStorage.setItem('token', data.token);
@@ -86,24 +90,27 @@ async function login_usuario(ev) {
     }
 }
 
+// Validacion del token al abrir la pagina
 (async function validarToken() {
     const token = localStorage.getItem('token');
 
+    // Si existe un token, lo comprobamos
     if (token != null) {
         try {
             const res = await fetch(`${API_BASE}/api/user`, {
                 method: "GET",
                 headers: { Authorization: token }
             });
-            
-            const data = await res.json();
-            console.log(res);
 
+            const data = await res.json();
+
+            // Si el token es valido, reenviamos el usuario a la pagina principal
             if (data.ok) {
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('user', data.user);
                 window.location.href = "/";
             } else {
+                // En cualquier otro caso lo vaciamos para que inicie sesion de nuevo
                 localStorage.removeItem('user');
                 localStorage.removeItem('token');
             }
