@@ -3,6 +3,10 @@ localhost {
     tls /etc/caddy/SSL/Server/server.crt /etc/caddy/SSL/Server/server.key
     file_server
 
+    log {
+        output stdout
+    }
+
     handle /api/* {
         reverse_proxy http://backend:9000
     }
