@@ -43,9 +43,12 @@ with conn.cursor() as cur:
         telegram BOOLEAN NOT NULL,
         whatsapp BOOLEAN NOT NULL,
         slack BOOLEAN NOT NULL,
+        file BINARY,
         FOREIGN KEY(username) REFERENCES users(username)
+            ON UPDATE CASCADE ON DELETE CASCADE,
         );
                 """)
+
 
 # Clase que hereda funciones y datos miembro de la libreria HTTP
 class MyHandler(http.server.SimpleHTTPRequestHandler):
@@ -74,6 +77,66 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _get_JSON(self):
+        content_type = self.headers.get("Content-Type", "")
+
+        length = int(self.headers.get("Content-Length", 0))
+        raw_body = self.rfile.read(length)
+
+        uploaded_file = None
+        uploaded_filename = None
+
+        if content_type.startswith("multipart/form-data"):
+            # Extract boundary
+            try:
+                boundary = content_type.split("boundary=")[1].encode()
+            except Exception:
+                self._send_json({"ok": False, "error": "Missing boundary"}, 502)
+                return
+
+            parts = raw_body.split(b"--" + boundary)
+
+            data = None
+
+            for part in parts:
+                if b"Content-Disposition" not in part:
+                    continue
+
+                header, _, value = part.partition(b"\r\n\r\n")
+                value = value.rstrip(b"\r\n")
+
+                # Extract name="..."
+                disposition = header.decode(errors="ignore")
+                if 'name="payload"' in disposition:
+                    try:
+                        data = json.loads(value.decode())
+                    except:
+                        self._send_json({"ok": False, "error": "Invalid JSON payload"}, 502)
+                        return
+
+                elif 'name="file"' in disposition:
+                    # Extract filename="..."
+                    match = re.search(r'filename="([^"]+)"', disposition)
+                    if match:
+                        uploaded_filename = match.group(1)
+                    uploaded_file = value  # bytes
+
+            if data is None:
+                self._send_json({"ok": False, "error": "Missing JSON payload"}, 502)
+                return
+
+            return length, data, uploaded_file, uploaded_filename
+
+        else:
+            # Fallback -> original JSON body
+            try:
+                data = json.loads(raw_body)
+            except:
+                self._send_json({"ok": False, "error": "Bad req content"}, 502)
+                return
+
+            return length, data
 
     # Fucnion respuesta de las peticiones GET (Validar tokens del usuario)
     def do_GET(self):
@@ -104,17 +167,11 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         self.row = None
-        try:
-            # Cargar el cuerpo de la peticion con el JSON recibido
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length)
-            data = json.loads(body)
-        except Exception:
-            self._send_json({"ok": False, "error": "Bad req content"}, 502)
-            return
 
         # Subdirectorio para registrar usuarios en la plataforma
         if self.path == "/api/user/register":
+            lengh, data = self._get_JSON()
+
             # Cargar en variables los datos del cuerpo esperados
             try:
                 username = data.get("username")
@@ -124,7 +181,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
                 return
 
-            
             if not re.match(self.passwd_regex, password) or not re.match(self.usr_regex, username):
                 self._send_json({"ok": False, "error": "Formato usuario/contraseña incorrecto"}, 505)
                 return
@@ -159,6 +215,8 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
         # Subdirectorio para mandar el inicio de sesion
         elif self.path == "/api/user/login":
+            lengh, data = self._get_JSON()
+
             # Cargar en variables los datos del cuerpo esperados
             try:
                 username = data.get("username")
@@ -167,7 +225,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 self._send_json({"ok": False, "error": "Missing user/pwd"}, 400)
                 return
- 
+
             try:
                 # Buscamos el usuario de la peticion de login
                 with conn.cursor() as cur:
@@ -203,12 +261,14 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
         # Registrar mensajes enviados para ponerlos en una "cola"
         elif self.path == "/api/messages/upload":
-            token     = data.get("token")
-            message   = data.get("message")
-            gmailB    = data.get("gmail") or False
+            lengh, data, uploaded_file, file_name = self._get_JSON()
+
+            token = data.get("token")
+            message = data.get("message")
+            gmailB = data.get("gmail") or False
             telegramB = data.get("telegram") or False
             whatsappB = data.get("whatsapp") or False
-            slackB    = data.get("slack") or False
+            slackB = data.get("slack") or False
 
             if len(message) > 2000:
                 self._send_json({"ok": False, "error": "Message too long"}, 507)
@@ -217,17 +277,17 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 with conn.cursor() as cur:
                     # Comprobamos que el usuario del mensaje corresponde con el token
                     cur.execute("""
-                                INSERT INTO messages (username, message, time, gmail, telegram, whatsapp, slack)
-                                SELECT username, %s, NOW(), %s, %s, %s, %s
+                                INSERT INTO messages (username, message, time, gmail, telegram, whatsapp, slack, file)
+                                SELECT username, %s, NOW(), %s, %s, %s, %s, %s
                                 FROM users
                                 WHERE token = %s;
-                                """, (message, gmailB, telegramB, whatsappB, slackB, token))
+                                """, (message, gmailB, telegramB, whatsappB, slackB, token, uploaded_file))
 
                     # Devolver al cliente confirmacion del usuario y el token de sesion generado
                 self._send_json({"ok": True})
             except Exception:
                 self._send_json({"ok": False, "error": "Unknown server error"}, 400)
-                return                
+                return
 
         else:
             self._send_json({"ok": False, "error": "Bad route"}, 404)
