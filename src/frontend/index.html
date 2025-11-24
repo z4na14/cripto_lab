@@ -18,6 +18,7 @@
 	<!-- scripts -->
 	<script defer src="js/session.js"></script>
 	<script defer src="js/store_message.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
 </head>
 <body>
 <!-- Navbar -->
@@ -87,6 +88,11 @@
 					<label>
 						<span class="material-symbols-outlined">file_copy</span>
 						<input id="keyInput" name="file" required type="file" placeholder="P12 para firmar"/>
+					</label>
+
+					<label>
+						<span class="material-symbols-outlined">key</span>
+						<input id="p12password" type="password" class="form-control" placeholder="Contraseña del P12">
 					</label>
 
 					<div class="d-flex gap-2">
