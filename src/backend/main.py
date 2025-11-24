@@ -45,7 +45,7 @@ with conn.cursor() as cur:
         slack BOOLEAN NOT NULL,
         file BINARY,
         FOREIGN KEY(username) REFERENCES users(username)
-            ON UPDATE CASCADE ON DELETE CASCADE,
+            ON UPDATE CASCADE ON DELETE CASCADE
         );
                 """)
 
@@ -88,7 +88,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         uploaded_filename = None
 
         if content_type.startswith("multipart/form-data"):
-            # Extract boundary
             try:
                 boundary = content_type.split("boundary=")[1].encode()
             except Exception:
@@ -106,7 +105,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 header, _, value = part.partition(b"\r\n\r\n")
                 value = value.rstrip(b"\r\n")
 
-                # Extract name="..."
+                # Sacamos el nombre
                 disposition = header.decode(errors="ignore")
                 if 'name="payload"' in disposition:
                     try:
@@ -116,7 +115,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                         return
 
                 elif 'name="file"' in disposition:
-                    # Extract filename="..."
                     match = re.search(r'filename="([^"]+)"', disposition)
                     if match:
                         uploaded_filename = match.group(1)
@@ -129,7 +127,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             return length, data, uploaded_file, uploaded_filename
 
         else:
-            # Fallback -> original JSON body
+            # Fallback: JSON original
             try:
                 data = json.loads(raw_body)
             except:

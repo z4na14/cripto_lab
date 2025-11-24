@@ -138,14 +138,12 @@ async function guardar_mensaje(ev) {
 
     try {
         const signedFile = await firmar_archivo(file, keyFile, p12Password);
-        // Añadir el archivo original
-        formData.append("file", file);
-
         // Añadir archivo de firma
         formData.append("signed-file", signedFile);
         // Enviar la peticion
         const res = await fetch(`${API_BASE}/api/messages/upload`, {
             method: "POST",
+            headers: {"Content-type": "multipart/form-data"},
             body: formData,
         });
 
