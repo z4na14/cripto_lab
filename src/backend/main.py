@@ -80,7 +80,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
     def _get_JSON(self):
         content_type = self.headers.get("Content-Type", "")
-
         length = int(self.headers.get("Content-Length", 0))
         raw_body = self.rfile.read(length)
 
@@ -92,10 +91,9 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 boundary = content_type.split("boundary=")[1].encode()
             except Exception:
                 self._send_json({"ok": False, "error": "Missing boundary"}, 502)
-                return
+                return None # Explicitly return None on error
 
             parts = raw_body.split(b"--" + boundary)
-
             data = None
 
             for part in parts:
@@ -104,25 +102,24 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
                 header, _, value = part.partition(b"\r\n\r\n")
                 value = value.rstrip(b"\r\n")
-
-                # Sacamos el nombre
                 disposition = header.decode(errors="ignore")
+
                 if 'name="payload"' in disposition:
                     try:
                         data = json.loads(value.decode())
                     except:
                         self._send_json({"ok": False, "error": "Invalid JSON payload"}, 502)
-                        return
+                        return None
 
                 elif 'name="file"' in disposition:
                     match = re.search(r'filename="([^"]+)"', disposition)
                     if match:
                         uploaded_filename = match.group(1)
-                    uploaded_file = value  # bytes
+                    uploaded_file = value
 
             if data is None:
                 self._send_json({"ok": False, "error": "Missing JSON payload"}, 502)
-                return
+                return None
 
             return length, data, uploaded_file, uploaded_filename
 
@@ -132,8 +129,9 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 data = json.loads(raw_body)
             except:
                 self._send_json({"ok": False, "error": "Bad req content"}, 502)
-                return
+                return None
 
+            # FIX: Return 4 values here too to match the multipart return
             return length, data
 
     # Fucnion respuesta de las peticiones GET (Validar tokens del usuario)
@@ -259,7 +257,15 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
         # Registrar mensajes enviados para ponerlos en una "cola"
         elif self.path == "/api/messages/upload":
-            lengh, data, uploaded_file, file_name = self._get_JSON()
+            # 1. Capture the result in a single variable first
+            parse_result = self._get_JSON()
+
+            # 2. Check if it is None (meaning an error occurred and response was sent)
+            if parse_result is None:
+                return
+
+            # 3. Now it is safe to unpack
+            lengh, data, uploaded_file, file_name = parse_result
 
             token = data.get("token")
             message = data.get("message")
@@ -269,11 +275,12 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             slackB = data.get("slack") or False
 
             if len(message) > 2000:
+                # Note: You should probably return here after sending the error
                 self._send_json({"ok": False, "error": "Message too long"}, 507)
+                return
 
             try:
                 with conn.cursor() as cur:
-                    # Comprobamos que el usuario del mensaje corresponde con el token
                     cur.execute("""
                                 INSERT INTO messages (username, message, time, gmail, telegram, whatsapp, slack, file)
                                 SELECT username, %s, NOW(), %s, %s, %s, %s, %s
@@ -283,10 +290,9 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
                     # Devolver al cliente confirmacion del usuario y el token de sesion generado
                 self._send_json({"ok": True})
-            except Exception:
+            except Exception as e:
                 self._send_json({"ok": False, "error": "Unknown server error"}, 400)
                 return
-
         else:
             self._send_json({"ok": False, "error": "Bad route"}, 404)
             return
