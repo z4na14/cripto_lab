@@ -286,7 +286,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                                 SELECT username, %s, NOW(), %s, %s, %s, %s, %s
                                 FROM users
                                 WHERE token = %s;
-                                """, (message, gmailB, telegramB, whatsappB, slackB, token, uploaded_file))
+                                """, (message, gmailB, telegramB, whatsappB, slackB, uploaded_file, token))
 
                     # Devolver al cliente confirmacion del usuario y el token de sesion generado
                 self._send_json({"ok": True})
