@@ -27,6 +27,7 @@ function clearMensajes() {
     document.getElementById("logs").innerHTML = "";
 }
 
+// Función que devuelve el archivo crudo en memoria para poder editar bytes
 function leerArchivoArrayBuffer(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -36,6 +37,7 @@ function leerArchivoArrayBuffer(file) {
     });
 }
 
+// Función que convierte el ArrayBuffer a un Binary String (necesaria para la librería forge)
 function arrayBufferToBinaryString(buffer) {
     const bytes = new Uint8Array(buffer);
     let binary = '';
@@ -49,13 +51,15 @@ async function firmar_archivo(pdfFile, p12File, password) {
     try {
         console.log("--- Iniciando firma PAdES precisa ---");
 
-        // 1. CARGAR ARRAYS
+        // Leer ficheros a memoria para poder manipular los bytes
         const pdfBuffer = await leerArchivoArrayBuffer(pdfFile);
         const p12Buffer = await leerArchivoArrayBuffer(p12File);
 
-        // 2. EXTRAER CLAVES (Forge)
+        // Forge necesita un binary string, convertir el arraybuffer a binary string
         const p12Der = arrayBufferToBinaryString(p12Buffer);
         const p12Asn1 = forge.asn1.fromDer(p12Der);
+
+        // Desencriptar el p12
         const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
 
         let keyData = null;
@@ -64,12 +68,14 @@ async function firmar_archivo(pdfFile, p12File, password) {
         // Búsqueda de clave y certificado
         for(let safeContent of p12.safeContents) {
             for(let safeBag of safeContent.safeBags) {
+                // Buscar la clave privada
                 if(safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === forge.pki.oids.keyBag) {
                     keyData = safeBag.key;
                 }
+                // Buscar el certificado
                 if(safeBag.type === forge.pki.oids.certBag) {
                     // Usamos el primer certificado encontrado (Certificado de usuario)
-                    // Si hay cadena de confianza, se deberían añadir en 'caCerts' (opcional)
+                    // Si hay cadena de confianza, se deberían añadir en 'caCerts'
                     if (!certData) certData = safeBag.cert;
                 }
             }
@@ -77,7 +83,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
 
         if (!keyData || !certData) throw new Error("Certificado P12 inválido o sin clave privada.");
 
-        // 3. PREPARAR PDF CON HUECO (PDF-LIB)
+        // Usamos pdf-lib para modificar la estructura lógica del pdf y añadir el campo de firma vacio
         const pdfDoc = await PDFLib.PDFDocument.load(pdfBuffer);
         const pages = pdfDoc.getPages();
 
@@ -88,17 +94,20 @@ async function firmar_archivo(pdfFile, p12File, password) {
         // Marcador único para encontrar el ByteRange
         const PLACEHOLDER_SIGNATURE = [0, 1234567890, 1234567890, 1234567890];
 
+        // Definimos el diccionario de firma
         const signatureDict = pdfDoc.context.obj({
             Type: 'Sig',
             Filter: 'Adobe.PPKLite',
             SubFilter: 'adbe.pkcs7.detached',
-            ByteRange: PLACEHOLDER_SIGNATURE,
-            Contents: PDFLib.PDFHexString.of(filler),
+            ByteRange: PLACEHOLDER_SIGNATURE,       // Aquí irán los offsets
+            Contents: PDFLib.PDFHexString.of(filler),       // Aquí se inyecta el Hex de la firma
             Reason: PDFLib.PDFString.of('Firmado digitalmente'),
             M: PDFLib.PDFString.fromDate(new Date()),
         });
 
         const signatureRef = pdfDoc.context.register(signatureDict);
+
+        // Creamos el widget visual
         const widgetDict = pdfDoc.context.obj({
             Type: 'Annot',
             Subtype: 'Widget',
@@ -111,6 +120,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         });
         const widgetRef = pdfDoc.context.register(widgetDict);
 
+        // Anclamos el widget a la primera página y al catálogo
         pages[0].node.set(PDFLib.PDFName.of('Annots'), pdfDoc.context.obj([widgetRef]));
         pdfDoc.catalog.set(PDFLib.PDFName.of('AcroForm'), pdfDoc.context.obj({
             Fields: [widgetRef],
@@ -121,32 +131,38 @@ async function firmar_archivo(pdfFile, p12File, password) {
         const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
         const pdfUint8 = new Uint8Array(pdfBytes);
 
-        // --- 4. CIRUGÍA DE BYTES (Corrección de Rangos) ---
+        // Ahora manipulamos el binario directamente
 
-        // 4.1 Encontrar ByteRange
+        // Encontrar el ByteRange
         const rangeMarker = "1234567890";
         const rangePos = findStringInUint8(pdfUint8, rangeMarker);
         if (rangePos === -1) throw new Error("No se encontró el marcador ByteRange.");
 
+        // Retrocedemos hasta encontrar '['
         let byteRangeStart = rangePos;
         while(byteRangeStart > 0 && String.fromCharCode(pdfUint8[byteRangeStart]) !== '[') byteRangeStart--;
 
+        // Avanzamos hasta ']'
         let byteRangeEnd = rangePos;
         while(byteRangeEnd < pdfUint8.length && String.fromCharCode(pdfUint8[byteRangeEnd]) !== ']') byteRangeEnd++;
 
-        // 4.2 Encontrar el Hueco de la Firma (< ... >)
+        // Encontrar el Hueco de la Firma (< ... >)
         // Buscamos una secuencia larga de '0' (0x30)
         const searchSeq = new Uint8Array(100).fill(0x30);
         const contentMatchPos = findIndex(pdfUint8, searchSeq);
         if (contentMatchPos === -1) throw new Error("No se encontró el hueco de la firma.");
 
+        // Ajustamos punteros para encontrar limitadores < y > del Hex
         let startSig = contentMatchPos;
         while(startSig > 0 && String.fromCharCode(pdfUint8[startSig]) !== '<') startSig--;
 
         let endSig = contentMatchPos;
         while(endSig < pdfUint8.length && String.fromCharCode(pdfUint8[endSig]) !== '>') endSig++;
 
-        // --- 5. CALCULAR Y ESCRIBIR NUEVO BYTERANGE ---
+        // Calculamos y escribimos el nuevo byterange
+        // El PDF firmado consiste en: [Contenido antes de la firma] + [Firma] + [COntenido después de la firma]
+        // La firma cubre: [Todo antes] + [Todo después]. El hueco de la firma se excluye del hash
+
         // Rango 1: Inicio hasta '<'
         const r1_start = 0;
         const r1_len = startSig;
@@ -155,7 +171,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         const r2_start = endSig + 1;
         const r2_len = pdfUint8.length - r2_start;
 
-        // Construir string ByteRange manteniendo longitud exacta
+        // Construir string del array ByteRange manteniendo longitud exacta
         const totalSpaceInsideBrackets = (byteRangeEnd - byteRangeStart) - 1;
         let newByteRangeContent = `${r1_start} ${r1_len} ${r2_start} ${r2_len}`;
 
@@ -170,10 +186,8 @@ async function firmar_archivo(pdfFile, p12File, password) {
             pdfUint8[byteRangeStart + 1 + i] = newByteRangeBytes[i];
         }
 
-        // --- 6. FIRMA CRIPTOGRÁFICA (PKCS#7) ---
-
-        // IMPORTANTE: Extraemos los bytes EXACTOS que ve el lector PDF.
-        // Al usar slice(), hacemos una copia de los datos que YA tienen el ByteRange correcto.
+        // Extraemos los bytes exactos que ve el lector PDF.
+        // Al usar slice(), hacemos una copia de los datos que ya tienen el ByteRange correcto.
         const part1 = pdfUint8.slice(r1_start, r1_len);
         const part2 = pdfUint8.slice(r2_start);
 
@@ -202,21 +216,19 @@ async function firmar_archivo(pdfFile, p12File, password) {
             ]
         });
 
-        // Generar firma detached
+        // Generar firma detached (sin el contenido original)
         p7.sign({ detached: true });
 
+        // Convertimos a DER y luego a Hex, que es lo que espera el PDF
         const rawSignature = forge.asn1.toDer(p7.toAsn1()).getBytes();
         let hexSignature = forge.util.bytesToHex(rawSignature);
-
-        // --- 7. INYECCIÓN DE LA FIRMA ---
 
         const availableSpace = endSig - startSig - 1;
 
         // Verificaciones de seguridad
         if (hexSignature.length > availableSpace) throw new Error("La firma es más grande que el hueco reservado.");
 
-        // Padding con ceros a la derecha
-        // IMPORTANTE: Si la longitud es impar, añadimos un 0 extra para que sea Hex válido
+        // Padding con ceros a la derecha. Si la longitud es impar, añadimos un 0 extra para que sea Hex válido
         if (hexSignature.length % 2 !== 0) hexSignature += '0';
 
         // Rellenar el resto con '0' (que en ASCII hex es 0x30, un padding seguro para strings PDF)
@@ -230,16 +242,14 @@ async function firmar_archivo(pdfFile, p12File, password) {
             pdfUint8[startSig + 1 + i] = signatureBytes[i];
         }
 
-        // --- DEBUG: DOWNLOAD START ---
-        // This will force the browser to download the file immediately
+        // Forzar al buscador a descargar el archivo inmediatamente
         const blob = new Blob([pdfUint8], { type: 'application/pdf' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = "DEBUG_" + pdfFile.name; // Adds prefix to distinguish file
+        link.download = "DEBUG_" + pdfFile.name; // Añadir prefijo para distinguir el archivo
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        // --- DEBUG: DOWNLOAD END ---
 
         console.log("Firma generada e inyectada exitosamente.");
         return new File([pdfUint8], pdfFile.name, { type: "application/pdf" });
@@ -250,7 +260,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
     }
 }
 
-// --- HELPERS (Sin cambios) ---
+// Helpers básicos para buscar strings dentro de buffers binarios
 function findStringInUint8(uint8, str) {
     const searchParams = stringToUint8Array(str);
     return findIndex(uint8, searchParams);
@@ -276,11 +286,12 @@ function stringToUint8Array(str) {
     return arr;
 }
 
-// Fucnion asincrona para mandar los mensajes al servidor
+// Funcion asincrona para mandar los mensajes al servidor
 async function guardar_mensaje(ev) {
     ev.preventDefault(); // Evitar que la pagina se recarge al pulsar el boton
     clearMensajes();
 
+    // Recogemos referencias del DOM
     const file = fileInput.files[0];
     const keyFile = keyInput.files[0];
     const p12Password = passwordInput.value;
@@ -292,6 +303,7 @@ async function guardar_mensaje(ev) {
     const telegram = options_select.namedItem("telegram").selected;
     const whatsapp = options_select.namedItem("whatsapp").selected;
 
+    // Añadimos los datos textuales como string JSON
     formData.append("payload",
         JSON.stringify({
             username,
@@ -304,8 +316,10 @@ async function guardar_mensaje(ev) {
     );
 
     try {
+        // Firmamos el PDF en cliente antes de subirlo
         const signedFile = await firmar_archivo(file, keyFile, p12Password);
 
+        // Adjuntamos el PDF ya firmado
         formData.append("file", signedFile);
 
         const res = await fetch(`${API_BASE}/api/messages/upload`, {

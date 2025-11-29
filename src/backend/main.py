@@ -43,7 +43,7 @@ with conn.cursor() as cur:
         telegram BOOLEAN NOT NULL,
         whatsapp BOOLEAN NOT NULL,
         slack BOOLEAN NOT NULL,
-        file BINARY,
+        file BYTEA,
         FOREIGN KEY(username) REFERENCES users(username)
             ON UPDATE CASCADE ON DELETE CASCADE
         );

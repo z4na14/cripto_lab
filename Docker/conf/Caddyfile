@@ -1,6 +1,6 @@
 localhost {
     root * /srv/frontend
-    tls /etc/caddy/SSL/Server/server.crt /etc/caddy/SSL/Server/server.key
+    tls /etc/caddy/SSL/Server/server-chain.crt /etc/caddy/SSL/Server/server.key
     file_server
 
     log {
@@ -17,10 +17,10 @@ localhost {
 }
 
 db.localhost {
-    tls /etc/caddy/SSL/Server/server.crt /etc/caddy/SSL/Server/server.key {
+    tls /etc/caddy/SSL/Server/server-chain.crt /etc/caddy/SSL/Server/server.key {
         client_auth {
             mode require_and_verify
-            trusted_ca_cert_file  /etc/caddy/SSL/Client/client.crt
+            trusted_ca_cert_file  /etc/caddy/SSL/CA/ca-chain.crt
         }
     }
 
