@@ -6,7 +6,7 @@
   subject: "Criptografía y seguridad informática",
   year: (25, 26),
   project: "Práctica 1",
-  title: "OmniMessenger: Envío de mensajes en masa",
+  title: "OmniMessenger: Envío de mensajes en masa - Parte 2",
   group: 81,
   authors: (
     (
@@ -61,7 +61,6 @@ La página principal se encontrará en `https://localhost`, y el gestor de la ba
 #footnote[Usuario predeterminado: "postgres" / Contraseña: "Cripto2526".]
 El certificado requerido para poder acceder al gestor se encuentra en `Docker/conf/SSL/Client/keystore.p12`, el cual
 hay que instalar en el navegador. #footnote[Tiene una contraseña vacía]
-
 
 = Firma digital
 Nuestro sistema implementa un mecanismo de firma electrónica basada en el estándar PAdES (PDF Advanced Electronic Signatures).
@@ -331,115 +330,53 @@ Se ha realizado la implementación mediante OpenSSL en línea de comandos:
     table.header(
         [ID], [Descripción], [Entrada], [Resultado esperado],
     ),
-    [1], [
-    Registro de usuario correcto
-    ], [
-    - Usuario: `TestUser`
-    - Contraseña: `Password@123`
-    ], [
-    - JSON: `{ "ok": true, "user": "TestUser", "token": "<16 caracteres hex>" }`
-    ],
+    [1],
+    [Flujo completo],
+    [PDF válido, P12 válido, contraseña correcta y mensaje de texto < 2000 car.],
+    [El navegador descarga `DEBUG_nombre.pdf`, la UI muestra "Mensaje almacenado correctamente" y dicho mensaje aparece reflejado en la base de datos.],
 
-    [2], [
-    Registro con usuario ya existente
-    ], [
-    - Usuario: `TestUser`
-    - Contraseña: `Password@123`
-    ], [
-    - JSON: `{ "ok": false, "error": "User already registered" }`
-    ],
+    [2],
+    [Contraseña P12 incorrecta],
+    [PDF válido, P12 válido, contraseña errónea.],
+    [Se muestra un mensaje al usuario como que no se ha podido firmar el archivo.],
 
-    [3], [
-    Registro con formato de usuario inválido
-    ], [
-    - Usuario: `usr`
-    - Contraseña: `Password@123`
-    ], [
-    - JSON: `{ "ok": false, "error": "Formato usuario/contraseña incorrecto" }`
-    ],
+    [3],
+    [Archivo de entrada no es PDF],
+    [Seleccionar una imagen `.png` o `.docx` en el `fileInput` de firma.],
+    [Excepción capturada por `PDFLib.load()`. Mensaje en consola/UI: "Failed to parse PDF header" o similar. No se descarga nada.],
 
-    [4], [
-    Registro con contraseña inválida
-    ], [
-    - Usuario: `UsuarioValido`
-    - Contraseña: `password123`
-    ], [
-    - JSON: `{ "ok": false, "error": "Formato usuario/contraseña incorrecto" }`
-    ],
+    [4],
+    [Validación Estricta de Firma],
+    [Abrir el archivo `DEBUG_*.pdf` generado en el Test 1 en un lector compatible],
+    [Aparece el archivo firmado, pero con un emisor irreconocido debido a la emisión en local.],
 
-    [5], [
-    Inicio de sesión correcto
-    ], [
-    - Usuario: `TestUser`
-    - Contraseña: `Password@123`
-    ], [
-    - JSON: `{ "ok": true, "user": "TestUser", "token": "<nuevo token>" }`
-    ],
+    [5],
+    [P12 sin clave privada],
+    [Un archivo `.p12` exportado solo con certificados públicos (sin la private key).],
+    [Se muestra un mensaje de error al usuario al intentar enviar el mensaje como que el certificado no contiene una clave privada.],
 
-    [6], [
-    Login con usuario inexistente
-    ], [
-    - Usuario: `NoExiste`
-    - Contraseña: `Password@123`
-    ], [
-    - JSON: `{ "ok": false, "error": "User does not exist" }`
-    ],
+    [6],
+    [Exceso de longitud de mensaje],
+    [Texto del mensaje mayor que 2500 caracteres.],
+    [Petición devuelve un mensaje de error indicándoselo al usuario.],
 
-    [7], [
-    Login con contraseña incorrecta
-    ], [
-    - Usuario: `TestUser`
-    - Contraseña: `MalaPass@123`
-    ], [
-    - JSON: `{ "ok": false, "error": "Wrong password" }`
-    ],
+    [7],
+    [Token de sesión inválido/caducado],
+    [Modificar `localStorage` manualmente con un token falso antes de enviar.],
+    [Se comprueba en el backend que el token del cliente sea válido, y no se almacena nada en la base de datos, al no poder verificarlo.],
 
-    [8], [
-    Validación de token válido
-    ], [
-    - Token: `<token válido>`
-    ], [
-    - JSON: `{ "ok": true, "user": "TestUser" }`
-    ],
+    [8],
+    [Overflow del hueco de firma],
+    [Reducir temporalmente en JS `SIGNATURE_LENGTH = 100` e intentar firmar.],
+    [El JS lanza error antes de enviar: "La firma es más grande que el hueco reservado".],
 
-    [9], [
-    Validación de token inexistente
-    ], [
-    - Token: `abc123fake`
-    ], [
-    - JSON: `{ "ok": false, "error": "Bad user" }`
-    ],
+    [9],
+    [Inyección de caracteres en el PDF],
+    [Usar un PDF que contenga la cadena "1234567890" en su texto visible.],
+    [El algoritmo de búsqueda `findStringInUint8` debe encontrar el marcador del ByteRange (el diccionario) y no confundirse con el texto del contenido. El PDF resultante debe abrirse sin errores.],
 
-    [10], [
-    Validación sin token
-    ], [
-    - Sin token en cabecera `Authorization`
-    ], [
-    - JSON: `{ "ok": false, "error": "Bad token (not received)" }`
-    ],
-    [11], [
-    Validación sin token
-    ], [
-    - Sin token en cabecera `Authorization`
-    ], [
-    - JSON: `{ "ok": false, "error": "Bad token (not received)" }`
-    ],
-
-    [12], [
-    Envío de mensaje válido
-    ], [
-    - Token: `<token válido>`
-    - Mensaje: `"Hola mundo"`
-    ], [
-    - JSON: `{ "ok": true }`
-    ],
-
-    [13], [
-    Envío de mensaje demasiado largo
-    ], [
-    - Token: `<token válido>`
-    - Mensaje: cadena de 2001 caracteres
-    ], [
-    - JSON: `{ "ok": false, "error": "Message too long" }`
-    ],
+    [10],
+    [Integridad del Multipart],
+    [Envío correcto del formulario.],
+    [Al backend le llega la petición correctamente sin errores, y el archivo PDF sigue íntegro.],
 )

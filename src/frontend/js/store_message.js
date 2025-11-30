@@ -81,7 +81,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
             }
         }
 
-        if (!keyData || !certData) throw new Error("Certificado P12 inválido o sin clave privada.");
+        if (!keyData || !certData) mostrarError("Certificado P12 inválido o sin clave privada.");
 
         // Usamos pdf-lib para modificar la estructura lógica del pdf y añadir el campo de firma vacio
         const pdfDoc = await PDFLib.PDFDocument.load(pdfBuffer);
@@ -136,7 +136,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         // Encontrar el ByteRange
         const rangeMarker = "1234567890";
         const rangePos = findStringInUint8(pdfUint8, rangeMarker);
-        if (rangePos === -1) throw new Error("No se encontró el marcador ByteRange.");
+        if (rangePos === -1) mostrarError("No se encontró el marcador ByteRange.");
 
         // Retrocedemos hasta encontrar '['
         let byteRangeStart = rangePos;
@@ -150,7 +150,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         // Buscamos una secuencia larga de '0' (0x30)
         const searchSeq = new Uint8Array(100).fill(0x30);
         const contentMatchPos = findIndex(pdfUint8, searchSeq);
-        if (contentMatchPos === -1) throw new Error("No se encontró el hueco de la firma.");
+        if (contentMatchPos === -1) mostrarError("No se encontró el hueco de la firma.");
 
         // Ajustamos punteros para encontrar limitadores < y > del Hex
         let startSig = contentMatchPos;
@@ -226,7 +226,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         const availableSpace = endSig - startSig - 1;
 
         // Verificaciones de seguridad
-        if (hexSignature.length > availableSpace) throw new Error("La firma es más grande que el hueco reservado.");
+        if (hexSignature.length > availableSpace) mostrarError("La firma es más grande que el hueco reservado.");
 
         // Padding con ceros a la derecha. Si la longitud es impar, añadimos un 0 extra para que sea Hex válido
         if (hexSignature.length % 2 !== 0) hexSignature += '0';
