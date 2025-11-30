@@ -1,4 +1,5 @@
 #import "uc3mreport.typ": conf
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
 
 #show: conf.with(
   degree: "Grado en Ingeniería Informática",
@@ -62,91 +63,265 @@ El certificado requerido para poder acceder al gestor se encuentra en `Docker/co
 hay que instalar en el navegador. #footnote[Tiene una contraseña vacía]
 
 
-= Operaciones criptográficas usadas
+= Firma digital
+Nuestro sistema implementa un mecanismo de firma electrónica basada en el estándar PAdES (PDF Advanced Electronic Signatures).
+Esto garantiza los siguientes pilares de la seguridad de la información:
 
-== Autentificación de usuarios
+- Integridad. Se asegura que el documento no ha sido modificado desde el momento de la firma. Cualquier cambio posterior invalidaría la firma.
 
-La autenticación de usuarios se hace mediante usuario / contraseña, en la página de inicio de sesión `https://localhost/login`.
-En el caso de que el usuario no fuese autenticado con anterioridad, la raiz del dominio redirige al inicio de sesión.
-Toda la información de inicio de sesión se envía sobre TLS, por lo que nos aseguramos que los datos se transmiten de forma
-segura hasta el servidor.
+- Autenticidad y no repudio. Vincula la identidad del firmante (a través de su certificado digital personal) con el documento e impide que este pueda negar la autoría de la firma a posteriori.
 
-La sesión del usuario se controla usando un token guardado en el almacenamiento local del navegador. Cuando este accede a la
-página, se envía el token de inicio de sesión al servidor, y este lo valida para que el resto de la comunicación no se rompa
-al realizar operaciones. Ahora bien, dicho token es generado al registrarse o al iniciar sesión, donde además se guarda la
-última IP de inicio de sesión, por lo que si se intenta usar el token fuera de la máquina inicial, el servidor requerirá al
-usuario volver a iniciar sesión.
+El objetivo principal es implementar una firma en el lado del cliente. Esto permite firmar los documentos en el navegador del usuario sin tener que enviar su clave privada al servidor, protegiendo la soberanía de los datos sensibles del usuario.
 
-Por otro lado, la contraseña no se guarda en texto plano. Al recibirla durante el registro, se "hashea" usando la librería de
-Python `bcrypt`, con la función `hashpw`, cuyo formato es:
+== Algoritmos utilizados
+Para la implementación criptográfica se han combinado varios estándares de PKCS para cubrir todo el proceso de la firma:
+- PKCS12 para almacenamiento de claves: Utilizamos este estándar para la lectua segura del certificado digital y la clave privada del usuario. El sistema utiliza la librería Forge de JavaScript para extraer la clave privada del contenedor en la memoria RAM durante el proceso de firma. Esto aporta ventajas de seguridad muy importantes:
+  
+  - Soberanía de la identidad. La clave nunca viaja a través de la red, lo que elimina el riesgo de intercepción (ataques Man-in-the-middle) o el almacenamiento en bases de datos de terceros.
+  
+  - El servidor solo recibe el documento final firmado, nunca va a tener acceso a las credenciales que generaron dicha firma.
 
-#align(center)[
-```
-$<version>$<coste>$<salt>.<hash>
-```
-]
+  - Al residir las claves únicamente en variables locales de la función JavaScript, el ciclo de vida de los datos sensibles se limita solo al instante de la firma. El recolector de basura del navegador y el cierre de sesión garantizan que no queden residuos de la clave privada.
 
-Donde la versión indica la variante del algoritmo (e.g. $2b$), el coste, cuantas $2^("coste")$ veces se ejecuta el algoritmo
-(e.g. $12$) y el salt generado de forma pseudoaleatoria. Luego para comprobar que la contraseña es correcta, se usa la función
-`checkpw`, la cual con la información descrita anteriormente, se "rehashea" la contraseña introducida y se comparan.
+- PKCS7 para el encapsulamiento de la firma. La estructura de firma presenta tres características:
+  
+  1. Firma separada. Se ha configurado la firma en modo detached. La estructura PKCS7 contiene únicamente los datos criptográficos y los metadatos, manteniendo el contenido del PDF fuera. El vínculo entre ambos se asegura mediante el ByteRange y el hash del documento, lo que permite que el archivo final siga siendo un PDF válido y legible.
+
+  2. Validación autocontenida. El contenedor generado no solo incluye la firma digital, sino también la copia pública del certificado X.509 del firmante. Esto garantiza que la firma sea autoportable, cualquier visor estándar puede verificar la identidad del firmante y la integridad del documento utilizando solamente la información incrustada, sin necesidad de acceso a la clave pública del usuario.
+
+  3. Atributos autenticados. Para elevar el nivel de seguridad, no se firma únicamente el hash del documento. El sistema construye y firma un bloque de atributos autenticados que incluye, además del hash, el atributo signingTime (fecha y hora de la firma). Al estar protegido el atributo por la firma criptográfica, se garantiza la integridad temporal, por lo que si alguien intentara cambiar la fecha de su ordenador, la validación matemática fallaría porque el hash no coincidiría con los atributos firmados.
+
+Para garantizar la interoperabilidad entre diferentes sistemas operativos y visores de PDF, las estructuras criptográficas generadas siguen las reglas de codificación DER(Distinguished Encoding Rules) del estándar ASN.1, asegurando que la representación binaria de la firma sea única e inequívoca.
+
+- SHA-256 para la integridad del documento.
+
+- Criptografía Asimétrica (RSA). Se utiliza el algoritmo RSA para el cifrado del hash. El sistema utiliza la clave privada, extraida del P12, para cifrar el resumen SHA-256 del documento. Cualquier persona con la clave pública (que viaja dentro del certificado) puede descifrarlo y verificar que coincide, garantizando la autenticidad y el no repudio.
+  
+== Estructura del PDF
+El proceso de inyección de firma se realiza mediante la manipulación directa de bytes:
+  
+  1. Reserva de espacio. Antes de firmar, se modifica la estructura lógica del PDF para añadir un campo de firma vacío relleno de ceros. Este proceso pre-calcula el tamaño final del archivo.
+
+  2. Cálculo del ByteRange. Se implementa el mecanismo de rangos de bytes definido por Adobe. Este mecanismo divide el archivo en dos partes: todo lo que hay antes de la firma y todo lo que hay después.
+
+  3. Inyección hexadecimal. La firma se convierte en una cadena hexadecimal y se inyecta en el hueco reservado. Gracias al cálculo del ByteRange, el PDF sabe que debe verificar el hash de todo el documento excepto los bytes donde reside la firma.
+
+== Gestión y Almacenamiento de las claves y las firmas
+
+- Gestión de claves. Las claves privadas nunca se almacenan en la aplicación ni se envían a través de la red.
+  
+  - El usuario carga su archivo .p12 localmente.
+
+  - El código lee el archivo en memoria, extrae la clave, realiza la operación matemática de la firma y una vez completado el proceso, los datos sensibles se eliminan.
+
+  - Esto elimina el riesgo de que el servidor comprometa y filtre las claves privadas.
+
+- Almacenamiento de la firma. La firma no se guarda en una base de datos externa, sino que se inyecta dentro del propio PDF.
+  
+  - Se modifica la estructura interna del PDF para reservar un espacio.
+
+  - Se calcula la firma y se escribe en formato hexadecimal en ese espacio reservado.
+
+  - El resultado final es un archivo PDF autónomo que tiene tanto el contenido como la prueba criptográfica de su validez. El servidor solamente recibe y guarda el archivo firmado. 
+
+== Representación visual de la firma
+#figure(
+  image("img/Diagrama_Firma.png"),
+  caption: "Diagrama de flujo del proceso de firma"
+)
+
+= Certificados de Clave pública
+
+== Generación de los Certificados de Clave Pública
+El proceso de generación sigue el estándar X.509 y se divide en tres etapas:
+  
+  - Generación del par de claves. Se utiliza el algoritmo RSA:
+    
+    - Para las Autoridades de Certificación, tanto la raiz como la intermedia, se han generado claves de 4096 bits.
+
+    - Para las entidades de Cliente y Servidor se han utilizado claves de 2048 bits, obteniendo un equilibrio entre seguridad y rendimiento. 
+
+== Jerarquía de Autoridades de Certificación
+
+Hemos implementado una jerarquía de dos niveles, compuesta por las siguientes capas:
+  
+  1. Root CA (Autoridad Raiz), "LocalRootCA":
+    
+    - Es el ancla de confianza.
+
+    - Está autofirmada.
+
+    - Tiene una validez de 20 años.
+  
+  2. Intermediate CA (Autoridad Intermedia), "LocalDevCA":
+
+    - Emitida y firmada por la autoridad raiz.
+
+    - Actúa como la entidad encargada de emitir los certificados finales.
+
+    - Tiene una validez de 10 años.
+  
+  3. Entidades finales:
+
+    - Server Cert. Certificado para el servidor, firmado por la CA Intermedia.
+
+    - Client Cert. Certificado para el usuario, también firmado por la CA Intermedia.
+
+#figure(
+  caption: [Jerarquía de Autoridades de Certificación(PKI)],
+  diagram(
+    node-stroke: 1pt + black,
+    node-fill: white,
+    node-outset: 4pt,
+    node-corner-radius: 4pt,
+    spacing: (2cm, 2cm),
+
+    node((0,0), align(center)[
+      *LocalRootCA* \
+      (Autoridad Raiz) \
+      #text(size: 0.8em, fill:black)[Autofirmada(20 años)]
+    ], name:<root>, fill: rgb("#fff2cc"), stroke: 1.5pt + orange),
+
+    node((0, 1.5), align(center)[
+      *LocalDevCA* \
+      (Autoridad Intermedia) \
+      #text(size: 0.8em, fill: black)[Firma Cliente y Servidor]
+    ], name: <inter>, fill: rgb("#dae8fc"), stroke: 1.5pt + blue),
+
+    node((-1, 3), align(center)[
+      *Client Cert* \
+      (Usuario y Firma PDF) \
+      #text(size: 0.8em, fill: black)[Autenticación y firma]
+    ], name: <client>, fill: rgb("d5e8d4"), stroke: 1pt + green),
+
+    node((1, 3), align(center)[
+      *Server Cert* \
+      (Servidor) \
+      #text(size: 0.8em, fill: black)[TLS y HTTPS]
+    ], name:<server>, fill: rgb("#d5e8d4"), stroke: 1pt + green),
+
+    edge(<root>, <inter>, "-|>", [Firma a]),
+    edge(<inter>, <client>, "-|>", [Emite]),
+    edge(<inter>, <server>, "-|>", [Emite]),
+  )
+)
+  
+ A raiz de esta arquitectura jerárquica, el despliegue de los certificados en el servidor no se realiza mediante archivos individuales, sino mediante cadenas de certificados, para que los clientes puedan construir la ruta de confianza completa hasta la raiz.
+  - Cadena del servidor (server-chain.crt): Contiene la concatenación del certificado del servidor + certificado de la CA intermedia + certificado de la CA Raíz. Al enviar la ruta completa durante el handshake TLS, el servidor garantiza que el cliente reciba toda la información necesaria para validar la conexión.
+
+  - Cadena del cliente (client-chain.crt): Contiene la concatenación del certificado del cliente + el certificado de la CA intermedia + el certificado de la CA Raíz. Es necesario para la firma PAdES, ya que permite incrustar toda la ruta de confianza dentro del PDF, asegurando que cualquier sistema confñie en la raiz.
+
+  - Cadena de Autoridad (ca-chain.crt): Contiene la concatenación de la CA intermedia + la CA raiz. Se utiliza en el servidor para validar los certificados de cliente asegurando que solo se acepten usuarios autenticados por la jerarquía completa.
 
 
-== Cifrado simétrico y asimétrico
+== Justificación de la Configuración
 
-Para el cifrado simétrico y asimétrico, nos hemos basado en el protocolo TLS, gestionado automaticamente por Caddy, al cual nosotros
-únicamente le teníamos que proveer con certificados generados y firmados en local. #footnote[En una aplicación real, usaríamos
-#link("https://letsencrypt.org/")[Lets Encrypt] como autoridad para firmar los certificado, pero Certbot no permite la generación
-de certificados para IPs locales (192.168.1.0/24).]
+Hemos optado por una jerarquía con una CA intermedia en lugar de firmar con la CA raiz por distintos motivos:
 
-Además de asegurar una conexión cifrada con el servidor, también hemos usado mTLS para acceder a la página de gestión de la base
-de datos, accesible desde la dirección `https://db.localhost`. Como en un entorno empresarial, solo un número muy reducido de
-personas tendrían acceso a esta información, mediante el uso de certificados mTLS nos aseguramos tanto confidencialidad e
-integridad, como autenticación.
+- Mayor seguridad para la CA raiz. Se mantiene offline, lo que reduce el riesgo de compromiso. Si la raiz permanece segura, toda la jerarquía mantiene su integridad.
 
+- Mejor organización. Facilita separar roles administrativos. La CA raiz se encarga de la firma de las CAs intermedias y estas se encargan de la emisión de los certificados a usuarios y servidores.
 
-1. Generamos la CA.
+- Posibilidad de reemplazo sencilla. Si una CA intermedia se ve comprometida o necesita ser reemplazada, no afecta a la raiz. Se crea una nueva CA sin tener que reinstalar toda la infraestructura.
 
-```bash
-openssl genrsa -out ca.key 4096
-openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.crt -subj "/C=US/ST=Local/L=Local/O=Local CA/CN=LocalDevCA"
-```
+- Mayor escalabilidad. Esta estructura permite crear diferentes CAs intermediaas para distintos propósitos sin multiplicar las raíces de confianza.
 
-2. Generamos la llave del servidor, con su respectivo certificado.
+== Implementación
 
-```bash
-openssl genrsa -out server.key 2048
-openssl req -new -key server.key -out server.csr -subj "/C=US/ST=Local/L=Local/O=Local Server/CN=localhost"
-openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile server-ext.cnf
-```
+Se ha realizado la implementación mediante OpenSSL en línea de comandos:
 
-3. Generamos la llave del cliente con su respectivo certificado
+  1. Creación de la Autoridad Raiz (Root CA):
+  
+  Se crea la identidad principal que firmará a las intermedias. Se usa una clave de 4096 bits y se autofirma.
 
-```bash
-openssl genrsa -out client.key 2048
-openssl req -new -key client.key -out client.csr -subj "/C=US/ST=Local/L=Local/O=Local Client/CN=client"
-openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -sha256
-```
+    - Generar la clave privada:
+    ```
+      openssl genrsa -out root-ca.key 4096
+    ```
 
-4. Generamos el archivo `pkcs12` del certificado del cliente para importarlo al navegador.
+    - Generar el certificado raiz autofirmado:
+    ```
+      openssl req -x509 -new -nodes -key root-ca.key -sha256 -days 7300 -out root-ca.crt -subj "/C=US/ST=Local/L=Local/O=Root Authority/CN=LocalRootCA"
+    ```
 
-```bash
-openssl pkcs12 -export -in client.crt -inkey client.key -name 'client' -out keystore.p12
-```
+  2. Creación de la Autoridad Intermedia:
 
-== Códigos de autenticación (MAC)
+  La entidad operativa. Se crea una solicitud y es la CA raiz quien la firma para darle validez.
 
-Las funciones de códigos de autenticación de mensajes (MAC) se utilizan en la aplicación para garantizar
-la integridad y autenticidad de los datos transmitidos entre el cliente y el servidor, principalmente
-durante el intercambio de tokens de sesión y en la comunicación cifrada bajo TLS. De esta forma, se evita
-que un atacante pueda modificar o falsificar los mensajes sin ser detectado.
+    - Generar la clave privada de 4096 bits:
+    ```
+      openssl genrsa -out ca.key 4096
+    ```
 
-En nuestro caso, el uso de MAC está integrado de forma implícita dentro del protocolo TLS, ya que las suites
-criptográficas negociadas por Caddy incluyen algoritmos de cifrado autenticado, como AES-GCM (Galois/Counter
-Mode) o CHACHA20-POLY1305, ambos reconocidos por ofrecer simultáneamente confidencialidad, integridad y
-autenticación del mensaje. Estos algoritmos no requieren una gestión separada del MAC, puesto que el
-cálculo del código de autenticación se realiza internamente como parte del proceso de cifrado, reduciendo el
-riesgo de errores de implementación.
+    - Generar solicitud de firma:
+    ```
+      openssl req -new -key ca.key -out ca.csr -subj "/C=US/ST=Local/L=Local/O=Local CA/CN=LocalDevCA"
+    ```
 
+    - Firmar el certificado, emitido por la CA raiz:
+    ```
+      openssl x509 -req -in ca.csr -CA root-ca.crt -CAkey root-ca.key -CAcreateserial -out ca.crt -days 3650 -sha256 -extfile ca-ext.cnf
+    ```
+
+  3. Emisión de Certificado de Servidor:
+
+  Se genera el certificado para localhost. Aqui la clave será de 2048 bits para mejorar el rendimiento del handshake TLS.
+
+    - Generar clave privada de 2048 bits:
+    ```
+      openssl genrsa -out server.key 2048
+    ```
+
+    - Generar la solicitud:
+    ```
+      openssl req -new -key server.key -out server.csr -subj "/C=US/ST=Local/L=Local/O=Local Server/CN=localhost"
+    ```
+
+    - Firmar el certificado, emitido por la CA intermedia:
+    ```
+      openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile server-ext.cnf
+    ```
+
+  4. Emisión del Certificado de Cliente:
+
+    - Generar la clave privada, de 2048 bits:
+    ```
+      openssl genrsa -out client.key 2048
+    ```
+
+    - Generar la solicitud:
+    ```
+      openssl req -new -key client.key -out client.csr -subj "/C=US/ST=Local/L=Local/O=Local Client/CN=client"
+    ```
+
+    - Firmar el certificado, emitido por la CA intermedia:
+    ```
+      openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -sha256 -extfile client-ext.cnf
+    ```
+
+    - Empaquetado PKCS12. Se une la clave privada y el certificado público en un solo archivo protegido por una contraseña #footnote("La contraseña es pkcs12").
+    ```
+      openssl pkcs12 -export -in client.crt -inkey client.key -name 'client' -out client.p12
+    ```
+
+  5. Construcción de Cadenas de Certificados:
+
+  Para el despliegue en el servidor, es necesario concatenar los certificados en un orden específico para crear la cadena de confianza completa.
+
+  - Crear la cadena del servidor (Certificado Servidor + Certificado CA intermedia + CA Raíz):
+  ```
+    cat server.crt ca.crt root-ca.crt > server-chain.crt
+  ```
+
+  - Crear la cadena del cliente (Cliente + CA Intermedia + CA Raíz):
+  ```
+    cat client.crt ca.crt root-ca.crt > client-chain.crt
+  ```
+
+  - Crear la cadena de confianza completa (CA Raiz + CA Intermedia):
+  ```
+    cat ca.crt root-ca.crt > ca-chain.crt
+  ```
 
 = Pruebas realizadas
 
