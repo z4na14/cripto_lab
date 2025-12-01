@@ -1,5 +1,6 @@
 #import "uc3mreport.typ": conf
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
+#import fletcher.shapes: pill, cylinder
 
 #show: conf.with(
   degree: "Grado en Ingeniería Informática",
@@ -59,8 +60,8 @@ Para detenerlo, hay que ejecutar `./down.sh`. #footnote[La aplicación ha sido d
 
 La página principal se encontrará en `https://localhost`, y el gestor de la base de datos en `https://db.localhost`.
 #footnote[Usuario predeterminado: "postgres" / Contraseña: "Cripto2526".]
-El certificado requerido para poder acceder al gestor se encuentra en `Docker/conf/SSL/Client/keystore.p12`, el cual
-hay que instalar en el navegador. #footnote[Tiene una contraseña vacía]
+El certificado requerido para poder acceder al gestor se encuentra en `Docker/conf/SSL/Client/client.p12`, el cual
+hay que instalar en el navegador. #footnote[La contraseña es "pkcs12"]
 
 = Firma digital
 Nuestro sistema implementa un mecanismo de firma electrónica basada en el estándar PAdES (PDF Advanced Electronic Signatures).
@@ -74,7 +75,7 @@ El objetivo principal es implementar una firma en el lado del cliente. Esto perm
 
 == Algoritmos utilizados
 Para la implementación criptográfica se han combinado varios estándares de PKCS para cubrir todo el proceso de la firma:
-- PKCS12 para almacenamiento de claves: Utilizamos este estándar para la lectua segura del certificado digital y la clave privada del usuario. El sistema utiliza la librería Forge de JavaScript para extraer la clave privada del contenedor en la memoria RAM durante el proceso de firma. Esto aporta ventajas de seguridad muy importantes:
+- PKCS12 para almacenamiento de claves: Utilizamos este estándar para la lectua segura del certificado digital y la clave privada del usuario. El sistema utiliza la librería Forge de JavaScript para extraer la clave privada del contenedor en la memoria durante el proceso de firma. Esto aporta ventajas de seguridad muy importantes:
   
   - Soberanía de la identidad. La clave nunca viaja a través de la red, lo que elimina el riesgo de intercepción (ataques Man-in-the-middle) o el almacenamiento en bases de datos de terceros.
   
@@ -125,8 +126,64 @@ El proceso de inyección de firma se realiza mediante la manipulación directa d
 
 == Representación visual de la firma
 #figure(
-  image("img/Diagrama_Firma.png"),
-  caption: "Diagrama de flujo del proceso de firma"
+  caption: "Diagrama de flujo del proceso de firma",
+  diagram(
+    // 1. Global Configuration
+    node-stroke: 1pt + white,
+    node-fill: none,       
+    node-outset: 0pt,
+    node-corner-radius: 0pt,
+    spacing: (1.5cm, 0.8cm), 
+    
+    // 2. Swimlane Headers
+    node((-0.5, 0), align(center)[#text(fill: black)[*Cliente*]], 
+         width: 4cm, height: 1cm, fill: rgb("#4caf50"), stroke: none),
+    
+    node((2, 0), align(center)[#text(fill: black)[*Servidor*]], 
+         width: 4cm, height: 1cm, fill: rgb("#78909c"), stroke: none),
+
+    // 3. Client Column
+    node((0, 1), align(center)[Inicio], shape: pill, name: <start>, stroke: black),
+    node((0, 2), align(center)[Entrada de datos], name: <input>,  stroke: black),
+    node((0, 3), align(center)[Lectura de \ archivos], name: <read>,  stroke: black),
+    node((0, 4), align(center)[Descifrado de \ p12 y extracción \ de clave], name: <decrypt>,  stroke: black),
+    node((0, 5), align(center)[Modificación de \ estructura del \ PDF], name: <modify>,  stroke: black),
+    node((0, 6), align(center)[Definir rangos a \ firmar], name: <ranges>,  stroke: black),
+    node((0, 7), align(center)[Hashing y cifrado], name: <hash>,  stroke: black),
+    node((0, 8), align(center)[Inyección de la \ firma], name: <inject>,  stroke: black),
+    node((0, 9), align(center)[Documento \ firmado], corner-radius: 5pt, name: <signed>,  stroke: black),
+
+    // 4. Server Column
+    node((2, 2), align(center)[Recepción y \ validación del \ archivo], name: <receive>,  stroke: black),
+
+    // Database (Using cylinder shape now that it is imported)
+    node((2, 5), align(center)[Almacenamiento \ de mensaje y \ archivo], 
+         shape: cylinder, name: <db>, height: 2cm,  stroke: black),
+
+    node((2, 8), align(center)[Proceso \ terminado], shape: pill, name: <end>,  stroke: black),
+
+    // 5. Connections
+    edge(<start>, <input>, "-|>", stroke: black),
+    edge(<input>, <read>, "-|>", stroke: black),
+    edge(<read>, <decrypt>, "-|>", stroke: black),
+    edge(<decrypt>, <modify>, "-|>", stroke: black),
+    edge(<modify>, <ranges>, "-|>", stroke: black),
+    edge(<ranges>, <hash>, "-|>", stroke: black),
+    edge(<hash>, <inject>, "-|>", stroke: black),
+    edge(<inject>, <signed>, "-|>", stroke: black),
+
+    edge(<receive>, <db>, "-|>", stroke: black),
+    edge(<db>, <end>, "-|>", stroke: black),
+
+    edge(
+         "-|>", 
+         stroke: 1.5pt + rgb("#4fc3f7"), 
+         label: text(fill: white, weight: "bold")[HTTPS],
+         label-pos: 0.1, 
+         label-side: left,
+         vertices: ((0, 9), (1, 9), (1, 2), (2, 2))
+    ),
+  )
 )
 
 = Certificados de Clave pública
@@ -196,7 +253,7 @@ Hemos implementado una jerarquía de dos niveles, compuesta por las siguientes c
     node((1, 3), align(center)[
       *Server Cert* \
       (Servidor) \
-      #text(size: 0.8em, fill: black)[TLS y HTTPS]
+      #text(size: 0.8em, fill: black)[TLS / HTTPS]
     ], name:<server>, fill: rgb("#d5e8d4"), stroke: 1pt + green),
 
     edge(<root>, <inter>, "-|>", [Firma a]),
@@ -234,12 +291,12 @@ Se ha realizado la implementación mediante OpenSSL en línea de comandos:
   Se crea la identidad principal que firmará a las intermedias. Se usa una clave de 4096 bits y se autofirma.
 
     - Generar la clave privada:
-    ```
+    ```bash
       openssl genrsa -out root-ca.key 4096
     ```
 
     - Generar el certificado raiz autofirmado:
-    ```
+    ```bash
       openssl req -x509 -new -nodes -key root-ca.key -sha256 -days 7300 -out root-ca.crt -subj "/C=US/ST=Local/L=Local/O=Root Authority/CN=LocalRootCA"
     ```
 
@@ -248,17 +305,17 @@ Se ha realizado la implementación mediante OpenSSL en línea de comandos:
   La entidad operativa. Se crea una solicitud y es la CA raiz quien la firma para darle validez.
 
     - Generar la clave privada de 4096 bits:
-    ```
+    ```bash
       openssl genrsa -out ca.key 4096
     ```
 
     - Generar solicitud de firma:
-    ```
+    ```bash
       openssl req -new -key ca.key -out ca.csr -subj "/C=US/ST=Local/L=Local/O=Local CA/CN=LocalDevCA"
     ```
 
     - Firmar el certificado, emitido por la CA raiz:
-    ```
+    ```bash
       openssl x509 -req -in ca.csr -CA root-ca.crt -CAkey root-ca.key -CAcreateserial -out ca.crt -days 3650 -sha256 -extfile ca-ext.cnf
     ```
 
@@ -267,39 +324,39 @@ Se ha realizado la implementación mediante OpenSSL en línea de comandos:
   Se genera el certificado para localhost. Aqui la clave será de 2048 bits para mejorar el rendimiento del handshake TLS.
 
     - Generar clave privada de 2048 bits:
-    ```
+    ```bash
       openssl genrsa -out server.key 2048
     ```
 
     - Generar la solicitud:
-    ```
+    ```bash
       openssl req -new -key server.key -out server.csr -subj "/C=US/ST=Local/L=Local/O=Local Server/CN=localhost"
     ```
 
     - Firmar el certificado, emitido por la CA intermedia:
-    ```
+    ```bash
       openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile server-ext.cnf
     ```
 
   4. Emisión del Certificado de Cliente:
 
     - Generar la clave privada, de 2048 bits:
-    ```
+    ```bash
       openssl genrsa -out client.key 2048
     ```
 
     - Generar la solicitud:
-    ```
+    ```bash
       openssl req -new -key client.key -out client.csr -subj "/C=US/ST=Local/L=Local/O=Local Client/CN=client"
     ```
 
     - Firmar el certificado, emitido por la CA intermedia:
-    ```
+    ```bash
       openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -sha256 -extfile client-ext.cnf
     ```
 
     - Empaquetado PKCS12. Se une la clave privada y el certificado público en un solo archivo protegido por una contraseña #footnote("La contraseña es pkcs12").
-    ```
+    ```bash
       openssl pkcs12 -export -in client.crt -inkey client.key -name 'client' -out client.p12
     ```
 
@@ -308,17 +365,17 @@ Se ha realizado la implementación mediante OpenSSL en línea de comandos:
   Para el despliegue en el servidor, es necesario concatenar los certificados en un orden específico para crear la cadena de confianza completa.
 
   - Crear la cadena del servidor (Certificado Servidor + Certificado CA intermedia + CA Raíz):
-  ```
+  ```bash
     cat server.crt ca.crt root-ca.crt > server-chain.crt
   ```
 
   - Crear la cadena del cliente (Cliente + CA Intermedia + CA Raíz):
-  ```
+  ```bash
     cat client.crt ca.crt root-ca.crt > client-chain.crt
   ```
 
   - Crear la cadena de confianza completa (CA Raiz + CA Intermedia):
-  ```
+  ```bash
     cat ca.crt root-ca.crt > ca-chain.crt
   ```
 
