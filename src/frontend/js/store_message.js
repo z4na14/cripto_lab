@@ -49,7 +49,7 @@ function arrayBufferToBinaryString(buffer) {
 
 async function firmar_archivo(pdfFile, p12File, password) {
     try {
-        console.log("--- Iniciando firma PAdES precisa ---");
+        console.log("Iniciando firma PAdES");
 
         // Leer ficheros a memoria para poder manipular los bytes
         const pdfBuffer = await leerArchivoArrayBuffer(pdfFile);
@@ -160,7 +160,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         while(endSig < pdfUint8.length && String.fromCharCode(pdfUint8[endSig]) !== '>') endSig++;
 
         // Calculamos y escribimos el nuevo byterange
-        // El PDF firmado consiste en: [Contenido antes de la firma] + [Firma] + [COntenido después de la firma]
+        // El PDF firmado consiste en: [Contenido antes de la firma] + [Firma] + [Contenido después de la firma]
         // La firma cubre: [Todo antes] + [Todo después]. El hueco de la firma se excluye del hash
 
         // Rango 1: Inicio hasta '<'
@@ -251,7 +251,7 @@ async function firmar_archivo(pdfFile, p12File, password) {
         link.click();
         document.body.removeChild(link);
 
-        console.log("Firma generada e inyectada exitosamente.");
+        console.log("Firma generada e inyectada");
         return new File([pdfUint8], pdfFile.name, { type: "application/pdf" });
 
     } catch (e) {
